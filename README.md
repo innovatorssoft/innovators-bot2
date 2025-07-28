@@ -312,7 +312,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Credits
 
 Developed by [Innovators Soft](https://facebook.com/innovatorssoft). Based on the [@itsukichan/baileys](https://github.com/itsukichann/baileys) library.
-
----
-
-**Keywords:** whatsapp, bot, automation, baileys, messaging, chat, nodejs, api, group-management, qr-code, client
