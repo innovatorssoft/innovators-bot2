@@ -187,7 +187,7 @@ const message = await client.loadMessage(chatId, messageId)
 
 ## More Examples and Information
 
-For a complete working example with message handling, group management, and error handling, check out our [`example.js`](https://github.com/Itsukichann/Baileys/blob/master/README.md) file. This example includes:
+For a complete working example with message handling, group management, and error handling, check out our [`example.js`](https://github.com/innovatorssoft/innovators-bot2/blob/main/example.js) file. This example includes:
 
 - 🔄 Connection handling and QR code generation
 - 📨 Message handling with commands
