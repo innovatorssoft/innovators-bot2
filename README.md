@@ -197,11 +197,6 @@ For a complete working example with message handling, group management, and erro
 
 Feel free to use this example as a starting point for your WhatsApp bot implementation.
 
----
-
-**Keywords:** whatsapp, bot, automation, baileys, messaging, chat, nodejs, api, group-management, qr-code, client
-
-
 ## Bot Commands
 
 The library includes example bot commands that you can use:
@@ -317,3 +312,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Credits
 
 Developed by [Innovators Soft](https://facebook.com/innovatorssoft). Based on the [@itsukichan/baileys](https://github.com/itsukichann/baileys) library.
+
+---
+
+**Keywords:** whatsapp, bot, automation, baileys, messaging, chat, nodejs, api, group-management, qr-code, client
