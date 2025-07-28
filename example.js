@@ -375,7 +375,16 @@ client.on('message', async msg => {
         case 'logout_no':
             await client.sendMessage(msg.from, 'Logout cancelled.');
             break;
-
+        case '!ad':
+                await client.sendAdReply(
+                    msg.from ,
+                    'Ad Message',
+                    './example.jpg', 
+                    'Ad Title',
+                    'Ad Body',
+                    'https://m.facebook.com/innovatorssoft'
+                )
+            break;
         case '!add':
         case '!remove':
         case '!promote':

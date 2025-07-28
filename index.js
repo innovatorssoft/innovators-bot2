@@ -1,4 +1,5 @@
-const { makeWASocket, 
+const { makeWASocket,
+        Browsers,
         useMultiFileAuthState, 
         DisconnectReason, 
         fetchLatestBaileysVersion } = 
@@ -80,7 +81,9 @@ class WhatsAppClient extends EventEmitter {
                 logger,
                 markOnlineOnConnect: true, 
                 syncFullHistory: true,
-                linkPreviewImageThumbnailWidth: 192
+                generateHighQualityLinkPreview: true,
+                linkPreviewImageThumbnailWidth: 192,
+                emitOwnEvents: true
             });
 
             this.sock.ev.on('connection.update', async (update) => {
@@ -104,6 +107,7 @@ class WhatsAppClient extends EventEmitter {
                             this.isConnected = true;
                             this._connectionState = 'connected';
                             this.emit('connected', userInfo);
+                            if (rl && !rl.closed) rl.close();
                         }
                     }
                 }
@@ -608,6 +612,47 @@ class WhatsAppClient extends EventEmitter {
             throw error;
         }
     }
+    /**
+     * Send an external ad reply with a local image
+     * @param {string} number - The phone number to send the ad to
+     * @param {string} localImagePath - Path to the local image file
+     * @param {string} title - Title of the ad
+     * @param {string} body - Body of the ad
+     * @returns {Promise<void>}
+     * @throws {Error} If client is not connected or message sending fails
+     */
+    async sendAdReply(number,msg, imgpath, title, body, sourceurl) {
+        if (!this.isConnected) {
+            throw new Error('Client is not connected');
+        }
+
+        try {
+        
+        // Read the local image as Buffer
+        const bufferLocalFile = fs.readFileSync(imgpath);
+
+        // Send message with external ad reply using local image
+        await this.sock.sendMessage(number, {
+            text: msg,
+            contextInfo: {
+                externalAdReply: {
+                title: title || 'Ad Title',
+                body: body || 'Ad Description',
+                mediaType: 1, // Image
+                previewType: 0,
+                showAdAttribution: true,
+                renderLargerThumbnail: true,
+                thumbnail: bufferLocalFile, 
+                sourceUrl: sourceurl || 'https://m.facebook.com/innovatorssoft',
+                mediaUrl: sourceurl || 'https://m.facebook.com/innovatorssoft'
+                }
+            }
+        });
+
+        } catch (err) {
+            console.error('Failed to send externalAdReply:', err);
+        }
+    }     
     /**
      * Get all groups the bot is a member of
      * @returns {Promise<Array<Group>>} Array of Group instances

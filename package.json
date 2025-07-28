@@ -1,14 +1,20 @@
 {
   "name": "innovators-bot2",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node example.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["whatsapp", "bot", "automation", "baileys", "whatsapp-web.js", "messaging", "chat", "nodejs", "api", "group-management", "qr-code", "client" ],
+  "author": "Javed Arshad Bhatti",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/innovatorssoft/innovators-bot2.git"
+  },
+  "homepage": "https://github.com/innovatorssoft/innovators-bot2#readme",
   "dependencies": {
     "@itsukichan/baileys": "latest",
     "link-preview-js": "^3.0.13",
