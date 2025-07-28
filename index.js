@@ -80,8 +80,7 @@ class WhatsAppClient extends EventEmitter {
                 logger,
                 markOnlineOnConnect: true, 
                 syncFullHistory: true,
-                linkPreviewImageThumbnailWidth: 192,
-                browser: ['Innovators Soft', 'Chrome', '120.0.0.0']
+                linkPreviewImageThumbnailWidth: 192
             });
 
             this.sock.ev.on('connection.update', async (update) => {
