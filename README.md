@@ -1,26 +1,46 @@
 # INNOVATORS SOFT WhatsApp Bot 2
 
+<div align="center">
+
+[![NPM Version](https://img.shields.io/npm/v/innovators-bot2?style=for-the-badge&logo=npm&color=CB3837)](https://www.npmjs.com/package/innovators-bot2)
+[![NPM Downloads](https://img.shields.io/npm/dm/innovators-bot2?style=for-the-badge&logo=npm&color=3399CC)](https://www.npmjs.com/package/innovators-bot2)
+[![Node.js Compatibility](https://img.shields.io/node/v/innovators-bot2?style=for-the-badge&logo=node.js&color=6cc24a)](https://nodejs.org/)
+[![License](https://img.shields.io/npm/l/innovators-bot2?style=for-the-badge&color=00c2a8)](https://github.com/innovatorssoft/innovators-bot2/blob/main/LICENSE)
+[![Discord Support](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/G3RfM6FDHS)
+
 A powerful WhatsApp client library that provides seamless integration between Baileys and WhatsApp-web.js style APIs. This library makes it easy to create WhatsApp bots and automation tools with a familiar interface.
+
+---
+
+### 📊 Client Metrics & Feature Matrix
+
+| 🚀 ENGINE & CORE | 🔐 PRIVACY & SECURITY | 🎛️ USER INTERACTION |
+| :--- | :--- | :--- |
+| • **Baileys v7.x.x (Multi-Device)** | • **Auto LID-to-PN Resolution** | • **Interactive Buttons V2** |
+| • **Agnostic Session Storage** | • **Built-in Anti-Delete Protection** | • **List and Carousel Cards** |
+| • **Automatic Auto-Reconnection** | • **Presence (Typing/Recording)** | • **Persistent Message Store** |
+| • **Text / Media Mention Arrays** | • **Privacy Management Controls** | • **Rich AI formatting (LaTeX/Tables)** |
+
+</div>
 
 ## Community
 
-> Join our # [Discord Server](https://discord.gg/G3RfM6FDHS) for support, updates, and discussions
+# Join our **[Discord Server](https://discord.gg/G3RfM6FDHS)** for support, updates, and discussions
 
 ## Features
 
-- 🚀 Easy to use, familiar WhatsApp-web.js style API
-- 📱 Multi-device support (Baileys v7.x.x)
-- 💬 Send and receive messages
--  Message reactions (add/remove emoji reactions)
-- 📸 Media handling (images, videos, documents)
-- � Mentions support in text and media messages
-- �👥 Group management
-- 💾 Message history and chat management
-- 🔄 Auto-reconnect functionality
-- 📝 Read receipts
-- 🔐 LID (Local Identifier) support for enhanced privacy
-- 🗂️ Signal repository store for LID/PN mapping
-- 🧩 Interactive buttons support for both text and media (URL or local file)
+* 🚀 **Familiar API** — Easy to use, WhatsApp-web.js style high-level interface.
+* 📱 **Multi-Device Engine** — Powered by the robust Baileys v7.x.x library.
+* 💬 **Messaging Suite** — Full send, receive, reply, and read receipt controls.
+* 🎭 **Message Reactions** — Add or remove emoji reactions in real-time.
+* 📸 **Media Handling** — Native support for images, videos, audio, documents, and stickers.
+* 👥 **Group Management** — Invite links, participant roles (promote/demote), settings, and join requests.
+* 💾 **Message Store Cache** — Auto-saved local store with Time-to-Live (TTL) configuration.
+* 🔄 **Auto-Reconnect** — Automated back-off connection handler.
+* 🔐 **LID System Support** — Fully resolves Local Identifiers to Phone Numbers post-decryption.
+* 📊 **Decrypted Poll Votes** — Real-time aggregation and vote event tracking.
+* 🧩 **Interactive Messages** — V2 buttons, lists, copy-code, and combined Call-to-Action templates.
+* 🤖 **Rich AI Formatting** — Meta AI-style tables, code snippets, and pre-rendered LaTeX albums.
 
 ## Installation
 
