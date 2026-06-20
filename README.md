@@ -1398,11 +1398,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Credits
 
-Developed by [Innovators Soft](https://facebook.com/innovatorssoft). Based on the [@itsukichan/baileys](https://github.com/itsukichann/baileys) library.
+Developed by [Innovators Soft](https://github.com/innovatorssoft). Based on the [@innovatorssoft/baileys](https://github.com/innovatorssoft/Baileys) library.
 
 # Special Thanks
 - [@whiskeysockets/baileys](https://github.com/whiskeysockets/Baileys)
-- [@itsukichan](https://github.com/itsukichann)
+- [@innovatorssoft](https://github.com/innovatorssoft)
 - [All Contributors](https://github.com/innovatorssoft/Baileys/)
 - [@ZenboBot](https://discordbot.innovatorssoftpk.com/) - AI Powered Baileys Bot
 # Sponsor Me
