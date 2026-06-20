@@ -1424,5 +1424,8 @@ Developed by [Innovators Soft](https://github.com/innovatorssoft). Based on the 
 - [@innovatorssoft](https://github.com/innovatorssoft)
 - [All Contributors](https://github.com/innovatorssoft/Baileys/)
 - [@ZenboBot](https://discordbot.innovatorssoftpk.com/) - AI Powered Baileys Bot
-# Sponsor Me
-Buy me a coffee - [Innovators Soft](https://facebook.com/innovatorssoft)
+## Support the Project
+
+This project is completely free and open-source. If it saved you time or helped your business, consider supporting us!
+
+[![Support on Patreon](https://img.shields.io/badge/Support-Patreon-FF424D?style=for-the-badge&logo=patreon&logoColor=white)](https://patreon.com/innovatorssoft7)
