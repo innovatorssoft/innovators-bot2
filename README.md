@@ -329,7 +329,7 @@ await client.toggleGroupEphemeral(groupId, 86400)
 await client.changeGroupAddMode(groupId, 'admin_add')
 ```
 
-### 6. Privacy Management
+### 7. Privacy Management
 
 ```javascript
 // Block a user
@@ -381,7 +381,7 @@ await client.updateProfileStatus('Hello World!')
 await client.updateProfileName('My name')
 ```
 
-### 7. Interactive Messages
+### 8. Interactive Messages
 
 #### Buttons
 ```javascript
@@ -577,7 +577,7 @@ await client.sendListV2(jid, {
 });
 ```
 
-### 8. Rich AI Messaging
+### 9. Rich AI Messaging
 
 Send Meta AI-style formatted responses like tables, lists, syntax-highlighted code blocks, and LaTeX expressions.
 
@@ -691,7 +691,7 @@ await client.sendMessage(jid, {
 });
 ```
 
-### 9. Typing & Presence Control
+### 10. Typing & Presence Control
 
 Use `createPresenceController` for manual or standalone typing/recording presence control — without needing the auto-reply system.
 
@@ -716,7 +716,7 @@ await typing.startRecording(jid, { duration: 3000 });
 await typing.stopAll();
 ```
 
-### 10. Message History (Store)
+### 11. Message History (Store)
 
 The library includes a robust message store to keep track of chat history, even across reloads.
 
@@ -783,7 +783,7 @@ client.on('store-loaded', (info) => {
 });
 ```
 
-### 11. Status / Story Posting
+### 12. Status / Story Posting
 
 Post text, image, video, and voice note statuses easily using the `sendStatus` method.
 
