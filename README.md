@@ -4,8 +4,7 @@ A powerful WhatsApp client library that provides seamless integration between Ba
 
 ## Community
 
-> Join our Discord server for support, updates, and discussions:
-> https://discord.gg/G3RfM6FDHS
+> Join our # [Discord Server](https://discord.gg/G3RfM6FDHS) for support, updates, and discussions
 
 ## Features
 
