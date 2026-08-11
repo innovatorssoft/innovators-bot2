@@ -588,18 +588,47 @@ async function start() {
                 }
                 break
 
-
             case '!call':
+                try {
+                    let targetJid = msgFrom;
+                    if (args) {
+                        targetJid = args.includes('@') ? args.trim() : `${args.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+                    }
+                    console.log(`\n📞 Initiating voice call with audio streaming to ${targetJid}...`);
+                    const audioPath = fs.existsSync('./audio.mp3') ? './audio.mp3' : 'silence';
+                    const call = await client.initiateCall(targetJid, {
+                        audioSource: audioPath, // MP3/WAV file path or "silence"
+                        //durationMs: 30000          // Optional duration in ms
+                    });
+
+
+                    if (call) {
+                        call.on('ringing', () => console.log('🔔 Call is ringing...'));
+                        call.on('connected', () => console.log('🎉 Connected & streaming audio!'));
+                        call.on('audio', (pcmChunk) => { /* Incoming 16 kHz Float32Array PCM */ });
+                        call.on('ended', (reason) => console.log('📱 Call ended:', reason));
+                        call.on('error', (err) => console.log('❌ Call error:', err));
+                    }
+
+                    await client.sendMessage(msgFrom, `📞 Voice call initiated with audio streaming (${audioPath})!`);
+
+                } catch (error) {
+                    console.error('Error initiating voice call:', error);
+                    await client.sendMessage(msgFrom, `Failed to initiate call: ${error.message}`);
+                }
+                break
+
+            case '!offercall':
                 try {
                     if (autoCancelCallTimer) {
                         clearTimeout(autoCancelCallTimer);
                         autoCancelCallTimer = null;
                     }
-                    const result = await client.initiateCall(msgFrom);
+                    const result = await client.offerCall(msgFrom, false);
                     lastOutgoingCallId = result?.callId || null;
                     lastOutgoingCallJid = msgFrom;
 
-                    await client.sendMessage(msgFrom, `Calling... CallId: ${lastOutgoingCallId || 'unknown'}`);
+                    await client.sendMessage(msgFrom, `📞 Call offer sent! CallId: ${lastOutgoingCallId || 'unknown'}`);
 
                     if (lastOutgoingCallId) {
                         autoCancelCallTimer = setTimeout(async () => {
@@ -615,8 +644,8 @@ async function start() {
                         }, 10000);
                     }
                 } catch (error) {
-                    console.error('Error initiating voice call:', error);
-                    await client.sendMessage(msgFrom, 'Failed to initiate call');
+                    console.error('Error offering call:', error);
+                    await client.sendMessage(msgFrom, `Failed to offer call: ${error.message}`);
                 }
                 break
 
@@ -626,10 +655,10 @@ async function start() {
                         clearTimeout(autoCancelCallTimer);
                         autoCancelCallTimer = null;
                     }
-                    const result = await client.initiateCall(msgFrom, { isVideo: true });
+                    const result = await client.offerCall(msgFrom, true);
                     lastOutgoingCallId = result?.callId || null;
                     lastOutgoingCallJid = msgFrom;
-                    await client.sendMessage(msgFrom, `Video calling... CallId: ${lastOutgoingCallId || 'unknown'}`);
+                    await client.sendMessage(msgFrom, `📹 Video call offer sent! CallId: ${lastOutgoingCallId || 'unknown'}`);
 
                     if (lastOutgoingCallId) {
                         autoCancelCallTimer = setTimeout(async () => {
@@ -645,8 +674,8 @@ async function start() {
                         }, 10000);
                     }
                 } catch (error) {
-                    console.error('Error initiating video call:', error);
-                    await client.sendMessage(msgFrom, 'Failed to initiate video call');
+                    console.error('Error offering video call:', error);
+                    await client.sendMessage(msgFrom, `Failed to offer video call: ${error.message}`);
                 }
                 break
 
@@ -756,8 +785,9 @@ async function start() {
                     `• !groupstatus - Post a status directly inside a group (@g.us)\n\n` +
 
                     `*📞 Calls*\n` +
-                    `• !call - Initiate a voice call\n` +
-                    `• !videocall - Initiate a video call\n` +
+                    `• !call - Initiate a voice call with WebAssembly audio streaming\n` +
+                    `• !offercall - Offer a voice call (signaling only)\n` +
+                    `• !videocall - Offer a video call (signaling only)\n` +
                     `• !cancelcall - Cancel last outgoing call\n\n` +
 
                     `*� Message Store*\n` +
