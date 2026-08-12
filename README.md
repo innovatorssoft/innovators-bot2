@@ -143,16 +143,29 @@ await client.sendMessage(msgFrom, {
 > - `msg.sender` — The actual person who sent the message (always a user JID like `923001234567@s.whatsapp.net`).
 > - When mentioning a user, always use `msg.sender` (not `msg.from`) to get the correct user JID.
 
-### Call Methods
+### 📞 Call Methods & Audio Streaming
+
+- Initiates an outgoing WhatsApp voice call with WebAssembly audio transport
+- Streams audio files (MP3/WAV/etc.) via FFmpeg into 16 kHz Float32 PCM WASM audio engine
+- Emits real-time call lifecycle events (`ringing`, `connected`, `audio`, `ended`, `error`)
 
 ```javascript
-// Initiate a voice call
-const { callId } = await client.initiateCall(jid)
+// Place a voice call and stream an audio file:
+const call = await client.initiateCall(jid, {
+    audioSource: './hello.mp3', // MP3/WAV file path or "silence"
+    durationMs: 30000          // Optional duration in ms
+})
 
-// Initiate a video call
-const videoCall = await client.initiateCall(jid, { isVideo: true })
+call.on('ringing', () => console.log('Call is ringing...'))
+call.on('connected', () => console.log('Connected & streaming audio!'))
+call.on('audio', (pcmChunk) => { /* Incoming 16 kHz Float32Array PCM */ })
+call.on('ended', (reason) => console.log('Call ended:', reason))
+call.on('error', (err) => console.error('Call error:', err))
 
-// Cancel an outgoing call
+// Simple call signaling (voice or video call offer):
+const result = await client.offerCall(jid, isVideo)
+
+// Cancel an outgoing call:
 await client.cancelCall(callId, jid)
 ```
 
