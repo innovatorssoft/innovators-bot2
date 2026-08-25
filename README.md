@@ -33,7 +33,7 @@ A powerful WhatsApp client library that provides seamless integration between Ba
 * 📱 **Multi-Device Engine** — Powered by the robust Baileys v7.x.x library.
 * 💬 **Messaging Suite** — Full send, receive, reply, and read receipt controls.
 * 🎭 **Message Reactions** — Add or remove emoji reactions in real-time.
-* 📸 **Media Handling** — Native support for images, videos, audio, documents, and stickers.
+* 📸 **Media Handling** — Native support for images, videos, audio, voice notes (auto OGG Opus conversion for PTT waveform), documents, and stickers.
 * 👥 **Group Management** — Invite links, participant roles (promote/demote), settings, and join requests.
 * 💾 **Message Store Cache** — Auto-saved local store with Time-to-Live (TTL) configuration.
 * 🔄 **Auto-Reconnect** — Automated back-off connection handler.
@@ -171,28 +171,53 @@ await client.cancelCall(callId, jid)
 
 ### 2. Media Handling
 
+Send images, videos, audio, documents, and PTT voice notes with automatic format conversion.
+
 ```javascript
-// Send an image
+// 1. Send an image
 await client.sendMedia('1234567890@s.whatsapp.net', './image.jpg', {
     caption: 'Check out this image!'
-})
+});
 
 // Send an image with mentions
 await client.sendMedia('1234567890@s.whatsapp.net', './image.jpg', {
     caption: 'Hey @user, check this out!',
     mentions: ['user@s.whatsapp.net']
-})
+});
 
-// Send a document
+// 2. Send a video or GIF
+await client.sendMedia('1234567890@s.whatsapp.net', './video.mp4', {
+    caption: 'Watch this clip!',
+    asGif: false // Set true to play as looping GIF
+});
+
+// 3. Send regular audio (MP3, WAV, M4A, etc.)
+await client.sendMedia('1234567890@s.whatsapp.net', './audio.mp3');
+
+// 4. Send Voice Note / PTT (Push-To-Talk)
+// Automatically converts any audio format (MP3, WAV, M4A, AAC, etc.) to OGG Opus with waveform
+await client.sendMedia('1234567890@s.whatsapp.net', './audio.mp3', {
+    asVoiceNote: true // or ptt: true
+});
+
+// 5. Send a document
 await client.sendDocument('1234567890@s.whatsapp.net', './document.pdf', 
     'Check out this document!'
-)
+);
 
 // Send a document with mentions (caption object is supported)
 await client.sendDocument('1234567890@s.whatsapp.net', './document.pdf', {
     caption: 'Hey @user, please read this',
     mentions: ['user@s.whatsapp.net']
-})
+});
+
+// 6. Direct Audio-to-OGG Opus Conversion (Utility)
+const { convertAudioToOgg, toPTT } = require('innovators-bot2');
+
+// Convert audio buffer or file to OGG Opus buffer
+const oggBuffer = await client.convertToOgg('./sample.mp3');
+// or via standalone function:
+// const oggBuffer = await convertAudioToOgg(audioBuffer);
 ```
 
 ### 3. Sticker Management

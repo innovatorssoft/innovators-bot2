@@ -32,6 +32,8 @@ const {
 
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 const { Boom } = require('@hapi/boom');
+const os = require('os');
+const ffmpeg = require('fluent-ffmpeg');
 const { EventEmitter } = require('events');
 const P = require('pino');
 const fs = require('fs');
@@ -916,9 +918,28 @@ class WhatsAppClient extends EventEmitter {
                 case '.mp3':
                 case '.ogg':
                 case '.wav':
+                case '.m4a':
+                case '.aac':
+                case '.opus':
+                case '.flac':
+                case '.wma':
+                case '.oga':
+                    const isPtt = Boolean(options.asVoiceNote || options.ptt);
+                    let audioData = fileBuffer;
+                    let audioMime = 'audio/mp4';
+
+                    if (isPtt) {
+                        // Convert audio to OGG (Opus codec) for WhatsApp Voice Note (PTT)
+                        audioData = await this.convertToOgg(fileBuffer);
+                        audioMime = 'audio/ogg; codecs=opus';
+                    } else if (fileExtension === '.ogg' || fileExtension === '.opus' || fileExtension === '.oga') {
+                        audioMime = 'audio/ogg; codecs=opus';
+                    }
+
                     mediaMessage = {
-                        audio: fileBuffer,
-                        mimetype: 'audio/mp4',
+                        audio: audioData,
+                        mimetype: audioMime,
+                        ptt: isPtt
                     };
                     break;
 
@@ -2018,6 +2039,24 @@ class WhatsAppClient extends EventEmitter {
     }
 
     /**
+     * Convert an audio Buffer or file to OGG format (Opus codec) for WhatsApp PTT (Voice Note)
+     * @param {Buffer|string} input - Audio Buffer or file path
+     * @returns {Promise<Buffer>} Converted OGG Opus audio buffer
+     */
+    async convertToOgg(input) {
+        return await convertAudioToOgg(input);
+    }
+
+    /**
+     * Convert an audio Buffer or file to OGG format (Opus codec) for WhatsApp PTT (Voice Note) - Alias
+     * @param {Buffer|string} input - Audio Buffer or file path
+     * @returns {Promise<Buffer>} Converted OGG Opus audio buffer
+     */
+    async toPTT(input) {
+        return await convertAudioToOgg(input);
+    }
+
+    /**
      * Get all stored messages for a specific chat
      * @param {string} chatId - The JID of the chat
      * @returns {Array} Array of stored messages (WebMessageInfo)
@@ -3108,6 +3147,68 @@ class WhatsAppClient extends EventEmitter {
     }
 }
 
+/**
+ * Convert audio Buffer or file to OGG format with Opus codec for WhatsApp PTT (Voice Note)
+ * @param {Buffer|string} input - Audio Buffer or path to audio file
+ * @returns {Promise<Buffer>} - Converted OGG Opus audio buffer
+ */
+async function convertAudioToOgg(input) {
+    return new Promise((resolve, reject) => {
+        const tempId = Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+        const tempIn = path.join(os.tmpdir(), `input_${tempId}.tmp`);
+        const tempOut = path.join(os.tmpdir(), `output_${tempId}.ogg`);
+
+        const cleanup = () => {
+            try { if (fs.existsSync(tempIn)) fs.unlinkSync(tempIn); } catch (_) {}
+            try { if (fs.existsSync(tempOut)) fs.unlinkSync(tempOut); } catch (_) {}
+        };
+
+        try {
+            if (Buffer.isBuffer(input)) {
+                fs.writeFileSync(tempIn, input);
+            } else if (typeof input === 'string') {
+                if (fs.existsSync(input)) {
+                    fs.copyFileSync(input, tempIn);
+                } else {
+                    return reject(new Error('Input file not found: ' + input));
+                }
+            } else {
+                return reject(new Error('Input must be a Buffer or file path string'));
+            }
+
+            ffmpeg(tempIn)
+                .audioCodec('libopus')
+                .audioChannels(1)
+                .audioFrequency(48000)
+                .audioBitrate('128k')
+                .outputOptions([
+                    '-avoid_negative_ts', 'make_zero',
+                    '-vbr', 'on',
+                    '-compression_level', '10'
+                ])
+                .format('ogg')
+                .on('error', (err) => {
+                    cleanup();
+                    reject(new Error(`Failed to convert audio to OGG for PTT: ${err.message}`));
+                })
+                .on('end', () => {
+                    try {
+                        const outBuffer = fs.readFileSync(tempOut);
+                        cleanup();
+                        resolve(outBuffer);
+                    } catch (err) {
+                        cleanup();
+                        reject(err);
+                    }
+                })
+                .save(tempOut);
+        } catch (err) {
+            cleanup();
+            reject(err);
+        }
+    });
+}
+
 function formatCode(code) {
     if (typeof code === 'string' && code.length === 8) {
         return code.slice(0, 4) + ' - ' + code.slice(4);
@@ -3122,5 +3223,7 @@ module.exports = {
     STATUS_FONTS,
     renderLatexToPng,
     uploadUnencryptedToWA,
-    RichSubMessageType
+    RichSubMessageType,
+    convertAudioToOgg,
+    toPTT: convertAudioToOgg
 }

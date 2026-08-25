@@ -343,6 +343,32 @@ async function start() {
                 }
                 break
 
+            case '!audio':
+                const regularAudio = fs.existsSync('./example.mp3') ? './example.mp3' :
+                    (fs.existsSync('./audio.mp3') ? './audio.mp3' : null);
+                if (regularAudio) {
+                    await client.sendMedia(msgFrom, regularAudio);
+                } else {
+                    await client.sendMessage(msgFrom, 'Audio file not found (place example.mp3 or audio.mp3)');
+                }
+                break
+
+            case '!voicenote':
+            case '!ptt':
+                const voiceAudio = fs.existsSync('./example.mp3') ? './example.mp3' :
+                    (fs.existsSync('./audio.mp3') ? './audio.mp3' :
+                    (fs.existsSync('./example.wav') ? './example.wav' :
+                    (fs.existsSync('./voice.ogg') ? './voice.ogg' : null)));
+                if (voiceAudio) {
+                    // Send as PTT Voice Note - automatically converts audio to OGG Opus
+                    await client.sendMedia(msgFrom, voiceAudio, {
+                        asVoiceNote: true
+                    });
+                } else {
+                    await client.sendMessage(msgFrom, 'Audio file not found (place example.mp3, audio.mp3, or example.wav)');
+                }
+                break
+
             case '!list':
                 await client.SendList(msgFrom, {
                     text: 'Please select an option from the list below:',
@@ -714,6 +740,8 @@ async function start() {
 
                     `*🖼️ Media & Content*\n` +
                     `• !media - Send an example image\n` +
+                    `• !audio - Send an audio file (MP3)\n` +
+                    `• !voicenote / !ptt - Send audio converted to PTT voice note (OGG)\n` +
                     `• !doc - Send an example document\n` +
                     `• !location - Send a location\n` +
                     `• !contact - Send a contact card\n` +
