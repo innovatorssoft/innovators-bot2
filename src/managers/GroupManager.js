@@ -508,6 +508,10 @@ const GroupManager = {
             throw new Error('Client is not connected');
         }
 
+        if (!jid || typeof jid !== 'string' || !jid.endsWith('@g.us')) {
+            throw new Error(`Invalid group JID: ${jid}`);
+        }
+
         // Check cache first
         const cached = this.groupMetadataCache.get(jid);
         if (cached) {
@@ -521,7 +525,7 @@ const GroupManager = {
             this.groupMetadataCache.set(jid, metadata);
             return metadata;
         } catch (error) {
-            console.error(`Error fetching metadata for group ${jid}:`, error);
+            console.error(`Error fetching metadata for group ${jid}:`, error?.message || error);
             throw error;
         }
     },

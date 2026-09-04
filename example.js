@@ -3,7 +3,9 @@ const { WhatsAppClient,
     STATUS_FONTS,
     renderLatexToPng,
     uploadUnencryptedToWA,
-    RichSubMessageType
+    RichSubMessageType,
+    VoipClient,
+    sendRichHtml
 } = require('./index')
 
 const qrcode = require('qrcode-terminal')
@@ -623,24 +625,135 @@ async function start() {
                     console.log(`\n📞 Initiating voice call with audio streaming to ${targetJid}...`);
                     const audioPath = fs.existsSync('./audio.mp3') ? './audio.mp3' : 'silence';
                     const call = await client.initiateCall(targetJid, {
-                        audioSource: audioPath, // MP3/WAV file path or "silence"
-                        //durationMs: 30000          // Optional duration in ms
+                        audioSource: audioPath,      // MP3/WAV file path or "silence"
+                        durationMs: 30000,           // Maximum playback duration in ms
+                        repeatAudio: true,           // Loop audio seamlessly until durationMs is reached
+                        preRingingTimeoutMs: 20000   // Timeout if recipient never reaches ringing
                     });
 
-
                     if (call) {
-                        call.on('ringing', () => console.log('🔔 Call is ringing...'));
-                        call.on('connected', () => console.log('🎉 Connected & streaming audio!'));
+                        call.on('ringing', () => console.log(`[${call.callId}] 🔔 Remote device is ringing...`));
+                        call.on('accepted', () => console.log(`[${call.callId}] 📞 Call answered!`));
+                        call.on('connected', () => console.log(`[${call.callId}] 🎉 Media connection established!`));
+                        call.on('audioReady', () => console.log(`[${call.callId}] 🎵 Audio pipeline ready!`));
+                        call.on('streaming', () => console.log(`[${call.callId}] 🔊 Streaming audio (${audioPath})`));
                         call.on('audio', (pcmChunk) => { /* Incoming 16 kHz Float32Array PCM */ });
-                        call.on('ended', (reason) => console.log('📱 Call ended:', reason));
-                        call.on('error', (err) => console.log('❌ Call error:', err));
+                        call.on('ended', (reason) => console.log(`[${call.callId}] 📱 Call ended:`, reason));
+                        call.on('error', (err) => console.error(`[${call.callId}] ❌ Call error:`, err));
                     }
 
-                    await client.sendMessage(msgFrom, `📞 Voice call initiated with audio streaming (${audioPath})!`);
+                    await client.sendMessage(msgFrom, `📞 Voice call initiated to ${targetJid} with audio streaming (${audioPath})!`);
 
                 } catch (error) {
                     console.error('Error initiating voice call:', error);
                     await client.sendMessage(msgFrom, `Failed to initiate call: ${error.message}`);
+                }
+                break
+
+            case '!videocall':
+                try {
+                    let targetJid = msgFrom;
+                    if (args) {
+                        targetJid = args.includes('@') ? args.trim() : `${args.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+                    }
+                    console.log(`\n📹 Initiating video call with WebAssembly video/audio streaming to ${targetJid}...`);
+                    const videoPath = fs.existsSync('./example.mp4') ? './example.mp4' : null;
+                    const audioPath = fs.existsSync('./audio.mp3') ? './audio.mp3' : (videoPath || 'silence');
+
+                    const videoCall = await client.initiateCall(targetJid, {
+                        isVideo: true,
+                        videoSource: videoPath,
+                        audioSource: audioPath,
+                        videoWidth: 640,
+                        videoHeight: 480,
+                        videoFps: 15,
+                        isHorizontal: false,
+                        durationMs: 30000,
+                        repeatAudio: true,
+                        videoLoop: true
+                    });
+
+                    if (videoCall) {
+                        videoCall.on('ringing', () => console.log(`[${videoCall.callId}] 🔔 Video call is ringing...`));
+                        videoCall.on('accepted', () => console.log(`[${videoCall.callId}] 📞 Video call accepted!`));
+                        videoCall.on('connected', () => console.log(`[${videoCall.callId}] 🎉 Video call connected!`));
+                        videoCall.on('videoStarted', () => console.log(`[${videoCall.callId}] 🎬 Video stream started`));
+                        videoCall.on('videoEnded', () => console.log(`[${videoCall.callId}] 🎬 Video stream ended`));
+                        videoCall.on('audioReady', () => console.log(`[${videoCall.callId}] 🎵 Audio pipeline ready!`));
+                        videoCall.on('streaming', () => console.log(`[${videoCall.callId}] 🔊 Streaming media`));
+                        videoCall.on('ended', (reason) => console.log(`[${videoCall.callId}] 📱 Video Call ended:`, reason));
+                        videoCall.on('error', (err) => console.error(`[${videoCall.callId}] ❌ Video Call error:`, err));
+                    }
+
+                    await client.sendMessage(msgFrom, `📹 Video call initiated to ${targetJid} with streaming!`);
+                } catch (error) {
+                    console.error('Error initiating video call:', error);
+                    await client.sendMessage(msgFrom, `Failed to initiate video call: ${error.message}`);
+                }
+                break
+
+            case '!multicall':
+            case '!batchcalls':
+                try {
+                    let recipients = [msgFrom];
+                    if (args) {
+                        recipients = args.split(',').map(s => s.trim()).filter(Boolean).map(n => n.includes('@') ? n : `${n.replace(/[^0-9]/g, '')}@s.whatsapp.net`);
+                    }
+                    const audioPath = fs.existsSync('./audio.mp3') ? './audio.mp3' : 'silence';
+                    const requests = recipients.map(jid => ({
+                        jid,
+                        options: {
+                            audioSource: audioPath,
+                            durationMs: 30000,
+                            repeatAudio: true
+                        }
+                    }));
+
+                    console.log(`\n📞 Initiating batch concurrent calls to ${recipients.length} recipients...`);
+                    const batchCalls = await client.initiateCalls(requests);
+
+                    batchCalls.forEach(c => {
+                        if (c) {
+                            c.on('ringing', () => console.log(`[${c.callId}] 🔔 Ringing ${c.peerJid}...`));
+                            c.on('accepted', () => console.log(`[${c.callId}] 📞 Answered by ${c.peerJid}`));
+                            c.on('connected', () => console.log(`[${c.callId}] 🎉 Connected to ${c.peerJid}`));
+                            c.on('ended', (reason) => console.log(`[${c.callId}] 📱 Ended:`, reason));
+                        }
+                    });
+
+                    await client.sendMessage(msgFrom, `📞 Batch initiated ${batchCalls.length} concurrent calls!`);
+                } catch (error) {
+                    console.error('Error initiating batch calls:', error);
+                    await client.sendMessage(msgFrom, `Failed to initiate batch calls: ${error.message}`);
+                }
+                break
+
+            case '!activecalls':
+                try {
+                    const activeSummaries = await client.getActiveCalls();
+                    const activeCount = await client.getActiveCallCount();
+                    let response = `📞 *Active Calls (${activeCount})*\n\n`;
+                    if (activeSummaries && activeSummaries.length > 0) {
+                        activeSummaries.forEach((call, idx) => {
+                            response += `${idx + 1}. Call ID: \`${call.callId}\`\n   To: ${call.peerJid || call.phoneNumber}\n   Status: ${call.status || call.state}\n\n`;
+                        });
+                    } else {
+                        response += `No active calls currently running.`;
+                    }
+                    await client.sendMessage(msgFrom, response);
+                } catch (error) {
+                    console.error('Error getting active calls:', error);
+                    await client.sendMessage(msgFrom, `Failed to get active calls: ${error.message}`);
+                }
+                break
+
+            case '!endallcalls':
+                try {
+                    await client.endAllCalls();
+                    await client.sendMessage(msgFrom, `🛑 All active calls have been ended.`);
+                } catch (error) {
+                    console.error('Error ending all calls:', error);
+                    await client.sendMessage(msgFrom, `Failed to end calls: ${error.message}`);
                 }
                 break
 
@@ -672,36 +785,6 @@ async function start() {
                 } catch (error) {
                     console.error('Error offering call:', error);
                     await client.sendMessage(msgFrom, `Failed to offer call: ${error.message}`);
-                }
-                break
-
-            case '!videocall':
-                try {
-                    if (autoCancelCallTimer) {
-                        clearTimeout(autoCancelCallTimer);
-                        autoCancelCallTimer = null;
-                    }
-                    const result = await client.offerCall(msgFrom, true);
-                    lastOutgoingCallId = result?.callId || null;
-                    lastOutgoingCallJid = msgFrom;
-                    await client.sendMessage(msgFrom, `📹 Video call offer sent! CallId: ${lastOutgoingCallId || 'unknown'}`);
-
-                    if (lastOutgoingCallId) {
-                        autoCancelCallTimer = setTimeout(async () => {
-                            try {
-                                await client.cancelCall(lastOutgoingCallId, lastOutgoingCallJid);
-                            } catch (error) {
-                                console.error('Error auto-canceling video call:', error);
-                            } finally {
-                                lastOutgoingCallId = null;
-                                lastOutgoingCallJid = null;
-                                autoCancelCallTimer = null;
-                            }
-                        }, 10000);
-                    }
-                } catch (error) {
-                    console.error('Error offering video call:', error);
-                    await client.sendMessage(msgFrom, `Failed to offer video call: ${error.message}`);
                 }
                 break
 
@@ -785,6 +868,7 @@ async function start() {
                     `• !updatename <text> - Update profile name\n\n` +
 
                     `*🤖 Rich AI Messaging*\n` +
+                    `• !richhtml - Send rich interactive HTML (GenAI UI card/dashboard)\n` +
                     `• !table - Send a formatted table\n` +
                     `• !richlist - Send a bulleted list\n` +
                     `• !codeblock - Send a syntax-highlighted code snippet\n` +
@@ -813,9 +897,12 @@ async function start() {
                     `• !groupstatus - Post a status directly inside a group (@g.us)\n\n` +
 
                     `*📞 Calls*\n` +
-                    `• !call - Initiate a voice call with WebAssembly audio streaming\n` +
+                    `• !call <number> - Voice call with WebAssembly audio streaming & repeat\n` +
+                    `• !videocall <number> - Video call with WebAssembly video/audio streaming\n` +
+                    `• !multicall <num1,num2> - Batch concurrent calls\n` +
+                    `• !activecalls - Show active calls count & summary\n` +
+                    `• !endallcalls - Terminate all active calls\n` +
                     `• !offercall - Offer a voice call (signaling only)\n` +
-                    `• !videocall - Offer a video call (signaling only)\n` +
                     `• !cancelcall - Cancel last outgoing call\n\n` +
 
                     `*� Message Store*\n` +
@@ -1016,6 +1103,44 @@ async function start() {
                     ]
                 },
                     { markdown: true });
+                break;
+
+            case '!richhtml':
+                try {
+                    console.log(`\n🚀 Sending Rich HTML GenAI interactive card to ${msgFrom}...`);
+                    await client.sendRichHtml(
+                        msgFrom,
+                        {
+                            id: 'dashboard-001',
+                            title: 'Sales & Analytics Dashboard',
+                            html: `
+                                <div style="padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #fff; border-radius: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                                    <h2 style="color: #38bdf8; margin: 0 0 10px; font-size: 18px;">🚀 Q3 Performance Dashboard</h2>
+                                    <p style="color: #94a3b8; font-size: 13px; margin: 0 0 12px;">Total Revenue: <b style="color: #4ade80;">$124,500</b> (+18% YoY)</p>
+                                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                                        <div style="flex: 1; background: #1e293b; padding: 8px; border-radius: 8px; text-align: center;">
+                                            <span style="display: block; color: #94a3b8; font-size: 11px;">Active Users</span>
+                                            <b style="color: #facc15; font-size: 14px;">12,480</b>
+                                        </div>
+                                        <div style="flex: 1; background: #1e293b; padding: 8px; border-radius: 8px; text-align: center;">
+                                            <span style="display: block; color: #94a3b8; font-size: 11px;">Conversion Rate</span>
+                                            <b style="color: #38bdf8; font-size: 14px;">4.8%</b>
+                                        </div>
+                                    </div>
+                                    <div style="background: #2563eb; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; font-size: 13px; color: #fff;">
+                                        ⚡ Powered by WhatsApp GenAI Native UI
+                                    </div>
+                                </div>
+                            `,
+                            source: 'dashboard_service'
+                        },
+                        null
+                    );
+                    await client.sendMessage(msgFrom, `✅ Sent Rich HTML GenAI dashboard!`);
+                } catch (error) {
+                    console.error('Error sending Rich HTML:', error);
+                    await client.sendMessage(msgFrom, `Failed to send Rich HTML: ${error.message}`);
+                }
                 break;
 
             case '!groups':

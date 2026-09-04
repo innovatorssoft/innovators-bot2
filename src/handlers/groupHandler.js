@@ -4,8 +4,11 @@
  * @param {Array<object>} groups - Array of group objects
  */
 function handleGroupsUpsert(client, groups) {
+    if (!Array.isArray(groups)) return;
     for (const group of groups) {
-        client.updateGroupMetadataCache(group.id, group);
+        if (group?.id && typeof group.id === 'string' && group.id.endsWith('@g.us')) {
+            client.updateGroupMetadataCache(group.id, group);
+        }
     }
 }
 
@@ -15,11 +18,14 @@ function handleGroupsUpsert(client, groups) {
  * @param {Array<object>} groups - Array of group update objects
  */
 function handleGroupsUpdate(client, groups) {
+    if (!Array.isArray(groups)) return;
     for (const group of groups) {
-        const cached = client.groupMetadataCache.get(group.id);
-        if (cached) {
-            const updated = { ...cached, ...group };
-            client.updateGroupMetadataCache(group.id, updated);
+        if (group?.id && typeof group.id === 'string' && group.id.endsWith('@g.us')) {
+            const cached = client.groupMetadataCache.get(group.id);
+            if (cached) {
+                const updated = { ...cached, ...group };
+                client.updateGroupMetadataCache(group.id, updated);
+            }
         }
     }
 }
@@ -30,9 +36,15 @@ function handleGroupsUpdate(client, groups) {
  * @param {object} update - Participant update object { id, participants, action }
  */
 async function handleGroupParticipantsUpdate(client, update) {
+    if (!update || !update.id || typeof update.id !== 'string' || !update.id.endsWith('@g.us')) {
+        return;
+    }
+
     try {
         const metadata = await client.sock.groupMetadata(update.id);
-        client.updateGroupMetadataCache(update.id, metadata);
+        if (metadata) {
+            client.updateGroupMetadataCache(update.id, metadata);
+        }
     } catch (error) {
         const isNotFound = error.data === 404 ||
             error.message?.includes('item-not-found') ||
@@ -45,8 +57,15 @@ async function handleGroupParticipantsUpdate(client, update) {
                 reason: 'Group not found or bot was removed'
             });
         } else {
-            console.error(`Error refreshing metadata for group ${update.id}:`, error);
+            console.error(`Error refreshing metadata for group ${update.id}:`, error?.message || error);
         }
+    }
+
+    // Also emit group-participants-update event on client so listeners receive it
+    try {
+        client.emit('group-participants-update', update);
+    } catch (e) {
+        console.error('Error emitting group-participants-update:', e);
     }
 }
 
@@ -55,3 +74,4 @@ module.exports = {
     handleGroupsUpdate,
     handleGroupParticipantsUpdate
 };
+

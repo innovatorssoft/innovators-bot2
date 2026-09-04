@@ -53,6 +53,9 @@ const MessageManager = {
                     return await this.sendRichMessage(chatId, message.richResponse, options.quoted || null, { ...options, useMarkdown: true });
                 }
                 messageContent = { richResponse: message.richResponse };
+            } else if (message.richHtml || message.type === 'richHtml' || message.type === 'html') {
+                const htmlOptions = message.richHtml || message;
+                return await this.sendRichHtml(chatId, htmlOptions, options.quoted || null, options);
             } else {
                 // Handle different message types
                 switch (message.type) {
@@ -726,6 +729,31 @@ const MessageManager = {
         jid = this._normalizeJid(jid);
         if (!this.isConnected) throw new Error('Client is not connected');
         return await this.sock.sendUnifiedResponse(jid, quoted, captured, { ai: this.ai });
+    },
+
+    /**
+     * Send rich interactive HTML payload rendered via WhatsApp's native GenAI UI engine
+     * Supports full HTML5/CSS/JavaScript interactive web views, canvas games, custom UI cards, dashboards, etc.
+     * 
+     * @param {string} jid - Target JID (phone number or WhatsApp JID)
+     * @param {string|object} options - HTML string or options object { id, title, html, source, trusted_sources, typename, headerText, footer, botJid, mentions }
+     * @param {object} [quoted=null] - Optional quoted message
+     * @param {object} [additionalOptions={}] - Optional relay / additional options
+     * @returns {Promise<object>} Result containing { message, messageId }
+     * @throws {Error} If client is not connected or options are invalid
+     */
+    async sendRichHtml(jid, options, quoted = null, additionalOptions = {}) {
+        jid = this._normalizeJid(jid);
+        if (!this.isConnected) {
+            throw new Error('Client is not connected');
+        }
+
+        try {
+            return await this.sock.sendRichHtml(jid, options, quoted, additionalOptions);
+        } catch (error) {
+            console.error('Error sending rich HTML:', error);
+            throw error;
+        }
     },
 
     /**

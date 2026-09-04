@@ -41,6 +41,8 @@ A powerful WhatsApp client library that provides seamless integration between Ba
 * 📊 **Decrypted Poll Votes** — Real-time aggregation and vote event tracking.
 * 🧩 **Interactive Messages** — V2 buttons, lists, copy-code, and combined Call-to-Action templates.
 * 🤖 **Rich AI Formatting** — Meta AI-style tables, code snippets, and pre-rendered LaTeX albums.
+* 🎨 **Rich HTML (GenAI UI Engine)** — Native WhatsApp GenAI UI engine interactive HTML payloads (custom UI cards, dashboards, interactive components).
+* 📞 **VoIP Voice & Video Calls & Streaming** — Single and batch concurrent outgoing calls with WebAssembly audio/video transport, repeat loops, duration limits, and video streaming.
 
 ## Installation
 
@@ -143,30 +145,104 @@ await client.sendMessage(msgFrom, {
 > - `msg.sender` — The actual person who sent the message (always a user JID like `923001234567@s.whatsapp.net`).
 > - When mentioning a user, always use `msg.sender` (not `msg.from`) to get the correct user JID.
 
-### 📞 Call Methods & Audio Streaming
+### 📞 Call Methods & VoIP Audio/Video Streaming (Single & Concurrent)
 
-- Initiates an outgoing WhatsApp voice call with WebAssembly audio transport
-- Streams audio files (MP3/WAV/etc.) via FFmpeg into 16 kHz Float32 PCM WASM audio engine
-- Emits real-time call lifecycle events (`ringing`, `connected`, `audio`, `ended`, `error`)
+- Initiates single or **multiple simultaneous concurrent outgoing WhatsApp voice & video calls** with WebAssembly VoIP audio/video transport
+- Streams audio files (MP3/WAV/etc.) via FFmpeg into isolated 16 kHz Float32 PCM audio pipelines
+- Streams video files (MP4) with configurable fps, resolution, repeat loops, and orientation
+- Completely isolated per-call state machines, AudioFeeders, duration limits, and repeat cycles
+- Seamless audio repetition (`repeatAudio: true`) with accurate duration limit (`durationMs`)
+- Emits real-time call lifecycle events (`ringing`, `accepted`, `connected`, `audioReady`, `streaming`, `audio`, `ended`, `error`, `stateChange`, `videoStarted`, `videoEnded`)
 
+#### Single Voice Call
 ```javascript
 // Place a voice call and stream an audio file:
 const call = await client.initiateCall(jid, {
     audioSource: './hello.mp3', // MP3/WAV file path or "silence"
-    durationMs: 30000          // Optional duration in ms
-})
+    durationMs: 30000,         // Maximum playback duration in ms
+    repeatAudio: true,         // Loop audio seamlessly until durationMs is reached
+    preRingingTimeoutMs: 20000 // Timeout if recipient never reaches ringing
+});
 
-call.on('ringing', () => console.log('Call is ringing...'))
-call.on('connected', () => console.log('Connected & streaming audio!'))
-call.on('audio', (pcmChunk) => { /* Incoming 16 kHz Float32Array PCM */ })
-call.on('ended', (reason) => console.log('Call ended:', reason))
-call.on('error', (err) => console.error('Call error:', err))
+call.on('ringing', () => console.log(`[${call.callId}] Remote device is ringing...`));
+call.on('accepted', () => console.log(`[${call.callId}] Call answered!`));
+call.on('connected', () => console.log(`[${call.callId}] Media connection established!`));
+call.on('audioReady', () => console.log(`[${call.callId}] Audio pipeline ready!`));
+call.on('streaming', () => console.log(`[${call.callId}] Audio streaming started!`));
+call.on('audio', (pcmChunk) => { /* Incoming 16 kHz Float32Array PCM */ });
+call.on('ended', (reason) => console.log(`[${call.callId}] Call ended:`, reason));
+call.on('error', (err) => console.error(`[${call.callId}] Call error:`, err));
+```
 
-// Simple call signaling (voice or video call offer):
-const result = await client.offerCall(jid, isVideo)
+#### Video Calls
+```javascript
+// Place a video call with video and audio streaming:
+const videoCall = await client.initiateCall(jid, {
+    isVideo: true,
+    videoSource: './video.mp4',
+    audioSource: './audio.mp3', // or 'silence' or './video.mp4'
+    videoWidth: 640,            // or width: 640
+    videoHeight: 480,           // or height: 480
+    videoFps: 15,               // default: 15
+    isHorizontal: false,        // true for landscape, false for portrait
+    durationMs: 30000,
+    repeatAudio: true,
+    videoLoop: true
+});
 
-// Cancel an outgoing call:
-await client.cancelCall(callId, jid)
+videoCall.on('ringing', () => console.log(`[${videoCall.callId}] Video Call is ringing...`));
+videoCall.on('accepted', () => console.log(`[${videoCall.callId}] Video Call accepted`));
+videoCall.on('connected', () => console.log(`[${videoCall.callId}] Video Call connected!`));
+videoCall.on('videoStarted', () => console.log(`[${videoCall.callId}] Video stream started`));
+videoCall.on('videoEnded', () => console.log(`[${videoCall.callId}] Video stream ended`));
+videoCall.on('audioReady', () => console.log(`[${videoCall.callId}] Audio pipeline ready!`));
+videoCall.on('streaming', () => console.log(`[${videoCall.callId}] Streaming media`));
+videoCall.on('ended', (reason) => console.log(`[${videoCall.callId}] Video Call ended:`, reason));
+videoCall.on('error', (err) => console.error(`[${videoCall.callId}] Video Call error:`, err));
+```
+
+#### Concurrent Calls & Active Call Management
+```javascript
+// Option A: Batch concurrent calls via initiateCalls
+const batchCalls = await client.initiateCalls([
+    { jid: '1234567890@s.whatsapp.net', options: { audioSource: './audio1.mp3', durationMs: 30000 } },
+    { jid: '9876543210@s.whatsapp.net', options: { audioSource: './audio2.mp3', durationMs: 45000, repeatAudio: true } }
+]);
+
+// Option B: Concurrent calls via Promise.all
+const calls = await Promise.all([
+    client.initiateCall('1234567890@s.whatsapp.net', { audioSource: './audio1.mp3', durationMs: 30000 }),
+    client.initiateCall('9876543210@s.whatsapp.net', { audioSource: './audio2.mp3', durationMs: 45000, repeatAudio: true })
+]);
+
+// Manage Active Calls:
+const activeSummaries = await client.getActiveCalls();
+console.log(`Active calls count: ${await client.getActiveCallCount()}`);
+
+// Terminate a single specific call:
+await client.endCall(batchCalls[0].callId);
+
+// Terminate all active calls:
+await client.endAllCalls();
+
+// Configure socket-level VoIP limits:
+await client.setVoipOptions({
+    maxConcurrentCalls: 10
+});
+
+// Or use standalone VoipClient:
+const { VoipClient } = require('innovators-bot2');
+const voip = new VoipClient({ authDir: './auth_info', maxConcurrentCalls: 10 });
+await voip.connect();
+const activeCall = await voip.call('1234567890', {
+    audioSource: './announcement.mp3',
+    durationMs: 45000,
+    repeatAudio: true
+});
+
+// Simple call signaling (voice or video call offer / cancel):
+const result = await client.offerCall(jid, false);
+await client.cancelCall(result.callId, jid);
 ```
 
 ### 2. Media Handling
@@ -745,6 +821,49 @@ await client.sendMessage(jid, {
         code: `const greet = (name) => {\n  console.log('Hello, ' + name)\n}\ngreet('World')`,
         language: 'javascript' // 'javascript' | 'typescript' | 'python' | 'js' | 'ts' | 'py'
     }
+});
+```
+
+#### Send Rich HTML (GenAI Interactive HTML)
+Send rich interactive HTML payloads (including full HTML5/CSS/JavaScript interactive web views, custom UI cards, analytics dashboards, etc.) directly rendered via WhatsApp's native GenAI UI engine:
+
+```javascript
+// Option A: Send via client method
+await client.sendRichHtml(
+    jid,
+    {
+        id: 'dashboard-001',
+        title: 'Sales Dashboard',
+        html: `
+            <div style="padding: 16px; font-family: sans-serif; background: #0f172a; color: #fff; border-radius: 12px;">
+                <h2 style="color: #38bdf8; margin: 0 0 8px;">🚀 Q3 Performance</h2>
+                <p style="color: #94a3b8; font-size: 14px;">Total Revenue: <b style="color: #4ade80;">$124,500</b> (+18%)</p>
+                <div style="background: #1e293b; padding: 10px; border-radius: 8px; margin-top: 10px; text-align: center;">
+                    <span style="color: #facc15; font-weight: bold;">Conversion Rate: 4.8%</span>
+                </div>
+            </div>
+        `,
+        source: 'dashboard_service' // optional trusted source identifier
+    },
+    null // optional quoted message
+);
+
+// Option B: Send via sendMessage with richHtml payload
+await client.sendMessage(jid, {
+    richHtml: {
+        id: 'promo-card',
+        title: 'Special Offer',
+        html: `<div style="padding: 15px; background: #2563eb; color: #fff; border-radius: 10px;">Exclusive Deal for You!</div>`
+    }
+});
+
+// Option C: Standalone function
+const { sendRichHtml } = require('innovators-bot2');
+
+await sendRichHtml(client, jid, {
+    id: 'interactive-card',
+    title: 'Interactive Card',
+    html: `<div style="padding: 15px; background: #16a34a; color: #fff; border-radius: 10px;">Hello from Rich HTML!</div>`
 });
 ```
 

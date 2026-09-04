@@ -125,6 +125,9 @@ class WhatsAppClient extends EventEmitter {
                 browser: Browsers.windows('Chrome'),
                 version: baileysVersion,
                 cachedGroupMetadata: async (jid) => {
+                    if (!jid || typeof jid !== 'string' || !jid.endsWith('@g.us')) {
+                        return null;
+                    }
                     const cached = this.groupMetadataCache.get(jid);
                     if (cached) {
                         return cached;
@@ -134,7 +137,7 @@ class WhatsAppClient extends EventEmitter {
                         this.groupMetadataCache.set(jid, metadata);
                         return metadata;
                     } catch (error) {
-                        console.error(`Error fetching metadata for group ${jid}:`, error);
+                        console.error(`Error fetching metadata for group ${jid}:`, error?.message || error);
                         return null;
                     }
                 },
