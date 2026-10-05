@@ -53,6 +53,7 @@ class WhatsAppClient extends EventEmitter {
         this.ai = config.ai === undefined ? true : config.ai;
         this.lastIncomingSession = null;
         this.enableVoip = config.enableVoip !== undefined ? config.enableVoip : true;
+        this.markOnlineOnConnect = config.markOnlineOnConnect !== undefined ? config.markOnlineOnConnect : true;
     }
 
     /**
@@ -113,7 +114,7 @@ class WhatsAppClient extends EventEmitter {
                 logger,
                 enableVoip: this.enableVoip,
                 voip: this.enableVoip,
-                markOnlineOnConnect: false,
+                markOnlineOnConnect: this.markOnlineOnConnect,
                 syncFullHistory: true,
                 getMessage: async (key) => {
                     const msg = this.messageStore.getOriginalMessage(key);

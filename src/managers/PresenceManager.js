@@ -7,8 +7,19 @@ const {
     monitorPresence,
     createPresenceTracker
 } = require('@innovatorssoft/baileys');
-
 const PresenceManager = {
+    /**
+     * Send presence update to WhatsApp (e.g. 'available', 'unavailable')
+     * @param {'available'|'unavailable'} [type='available'] - Presence state
+     * @param {string} [toJid] - Target JID (optional)
+     * @param {object} [options={}] - Additional options
+     * @returns {Promise<void>}
+     */
+    async sendPresenceUpdate(type = 'available', toJid, options = {}) {
+        if (!this.sock) throw new Error('Client is not connected to WhatsApp');
+        return await this.sock.sendPresenceUpdate(type, toJid, options);
+    },
+
     /**
      * Monitor presence (online/offline status & sessions) for specific contact(s)
      * @param {string|string[]} targetJid - Phone number(s) or WhatsApp JID(s) to monitor
@@ -17,6 +28,10 @@ const PresenceManager = {
      */
     monitorPresence(targetJid, options = {}) {
         if (!this.sock) throw new Error('Client is not connected to WhatsApp');
+        // Ensure client announces available presence so WhatsApp servers deliver contact presence stanzas
+        if (typeof this.sock.sendPresenceUpdate === 'function') {
+            this.sock.sendPresenceUpdate('available').catch(() => { });
+        }
         return monitorPresence(this.sock, targetJid, options);
     },
 

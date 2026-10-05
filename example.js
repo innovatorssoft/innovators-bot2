@@ -56,6 +56,7 @@ async function start() {
         sessionName: sessionDir,
         authmethod: authMethod,
         pairingPhoneNumber: pairingPhoneNumber,
+        markOnlineOnConnect: true,
         ai: true, // Enable/Disable AI flag for outgoing messages (default: true)
         // Message store persistence configuration
         messageStoreFilePath: path.join(sessionDir, 'message-store.json'),
@@ -90,16 +91,16 @@ async function start() {
         console.log('Plateform:', user.platform)
         console.log('isOnline:', user.isOnline)
 
-        const targetJid = ['923001234567@s.whatsapp.net', '923021234567@s.whatsapp.net'];
+        const targetJid = ['923224559543@s.whatsapp.net'];
 
         // Start presence tracking for target JIDs
         if (!presenceMonitor) {
             console.log(`[Presence] Starting presence tracking for: ${targetJid.join(', ')}`);
             presenceMonitor = monitorPresence(client, targetJid, {
-                logToConsole: false,
+                logToConsole: true,
                 autoResubscribe: true,
                 timezone: '+05:00',
-                trackMessagesAsPresence: false
+                trackMessagesAsPresence: true
             });
 
             presenceMonitor.on('online', (data) => {

@@ -145,6 +145,11 @@ function registerSocketEvents(client, authState, saveCreds) {
         }
     });
 
+    // Presence updates
+    sock.ev.on('presence.update', (update) => {
+        client.emit('presence-update', update);
+    });
+
     // Credential updates
     sock.ev.on('creds.update', saveCreds);
 
