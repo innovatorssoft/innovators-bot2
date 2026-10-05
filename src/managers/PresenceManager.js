@@ -3,10 +3,33 @@ const {
     createTypingIndicator,
     StatusHelper,
     STATUS_BACKGROUNDS,
-    STATUS_FONTS
+    STATUS_FONTS,
+    monitorPresence,
+    createPresenceTracker
 } = require('@innovatorssoft/baileys');
 
 const PresenceManager = {
+    /**
+     * Monitor presence (online/offline status & sessions) for specific contact(s)
+     * @param {string|string[]} targetJid - Phone number(s) or WhatsApp JID(s) to monitor
+     * @param {object} [options={}] - Options for presence tracker (autoResubscribe, timezone, trackMessagesAsPresence, etc.)
+     * @returns {object} PresenceTracker instance
+     */
+    monitorPresence(targetJid, options = {}) {
+        if (!this.sock) throw new Error('Client is not connected to WhatsApp');
+        return monitorPresence(this.sock, targetJid, options);
+    },
+
+    /**
+     * Create a presence tracker (alias for monitorPresence)
+     * @param {string|string[]} targetJid - Phone number(s) or WhatsApp JID(s) to monitor
+     * @param {object} [options={}] - Options for presence tracker
+     * @returns {object} PresenceTracker instance
+     */
+    createPresenceTracker(targetJid, options = {}) {
+        return this.monitorPresence(targetJid, options);
+    },
+
     /**
      * Send typing indicator to a chat
      * @param {string} jid - The JID of the chat

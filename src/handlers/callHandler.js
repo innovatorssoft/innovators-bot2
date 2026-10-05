@@ -23,6 +23,33 @@ async function handleIncomingCall(client, call) {
     }
 }
 
+/**
+ * Handle VoIP incoming call session event
+ * @param {object} client - The WhatsAppClient instance
+ * @param {object} session - CallSession instance from Baileys VoIP engine
+ */
+async function handleVoipIncomingCall(client, session) {
+    try {
+        client.lastIncomingSession = session;
+
+        // Auto clean up reference when call ends
+        session.on('ended', () => {
+            if (client.lastIncomingSession?.callId === session.callId) {
+                client.lastIncomingSession = null;
+            }
+        });
+
+        // Emit call.incoming and alias call:incoming on client
+        await client.emit('call.incoming', session);
+        await client.emit('call:incoming', session);
+    } catch (error) {
+        console.error('Error in VoIP incoming call handler:', error);
+        client.emit('error', error);
+    }
+}
+
 module.exports = {
-    handleIncomingCall
+    handleIncomingCall,
+    handleVoipIncomingCall
 };
+

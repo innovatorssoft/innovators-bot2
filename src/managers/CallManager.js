@@ -2,16 +2,27 @@ const CallManager = {
     /**
      * Reject an incoming call
      * @param {string} callId - The ID of the call to reject
-     * @param {object} callInfo - Additional call information
+     * @param {string|object} [callFromOrReason='declined'] - Caller JID, reason, or call info object
+     * @param {string} [reason='declined'] - Reason for rejection if callFrom is specified
      * @returns {Promise<void>}
      */
-    async rejectCall(callId, callInfo) {
+    async rejectCall(callId, callFromOrReason = 'declined', reason = 'declined') {
         if (!this.isConnected) {
             throw new Error('Client is not connected');
         }
 
         try {
-            await this.sock.rejectCall(callId, callInfo);
+            let callFrom;
+            let finalReason = reason;
+            if (typeof callFromOrReason === 'string' && (callFromOrReason.includes('@') || callFromOrReason.includes(':'))) {
+                callFrom = this._normalizeJid(callFromOrReason);
+            } else if (typeof callFromOrReason === 'string') {
+                finalReason = callFromOrReason;
+                callFrom = undefined;
+            } else {
+                callFrom = callFromOrReason;
+            }
+            return await this.sock.rejectCall(callId, callFrom, finalReason);
         } catch (error) {
             console.error('Error rejecting call:', error);
             throw error;
@@ -228,21 +239,98 @@ const CallManager = {
     /**
      * Accept (answer) an incoming call
      * @param {string} callId - Call ID to accept
-     * @param {string} callFrom - Caller JID
+     * @param {string|object} [callFromOrOptions] - Caller JID or options object (e.g. { audio: './audio.mp3' })
      * @param {boolean} [isVideo=false] - Whether it is a video call
-     * @returns {Promise<void>}
+     * @param {object} [options={}] - Options if callFrom is provided as string
+     * @returns {Promise<any>} Active call session or signaling result
      */
-    async acceptCall(callId, callFrom, isVideo = false) {
-        callFrom = this._normalizeJid(callFrom);
+    async acceptCall(callId, callFromOrOptions, isVideo = false, options = {}) {
         if (!this.isConnected) {
             throw new Error('Client is not connected');
         }
+        let callFrom = callFromOrOptions;
+        let opt = options;
+        if (typeof callFrom === 'object' && callFrom !== null) {
+            opt = callFrom;
+            callFrom = undefined;
+        } else if (typeof callFrom === 'string') {
+            callFrom = this._normalizeJid(callFrom);
+        }
         try {
-            return await this.sock.acceptCall(callId, callFrom, isVideo);
+            return await this.sock.acceptCall(callId, callFrom, isVideo, opt);
         } catch (error) {
             console.error('Error accepting call:', error);
             throw error;
         }
+    },
+
+    /**
+     * Get the underlying Baileys VoIP client instance
+     * @returns {Promise<object>} The VoipClient instance
+     */
+    async getVoipClient() {
+        if (!this.isConnected) {
+            throw new Error('Client is not connected');
+        }
+        try {
+            return await this.sock.getVoipClient();
+        } catch (error) {
+            console.error('Error getting VoIP client:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Get VoIP subsystem resource and memory stats
+     * @returns {Promise<object>} VoIP memory stats
+     */
+    async getVoipMemoryStats() {
+        if (!this.isConnected) {
+            throw new Error('Client is not connected');
+        }
+        try {
+            return await this.sock.getVoipMemoryStats();
+        } catch (error) {
+            console.error('Error getting VoIP memory stats:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Mute the microphone of an active call
+     * @param {string} [callId] - Call ID to mute (defaults to active session)
+     * @param {boolean} [mute=true] - true to mute, false to unmute
+     * @returns {Promise<boolean>}
+     */
+    async muteCall(callId, mute = true) {
+        if (!this.isConnected) {
+            throw new Error('Client is not connected');
+        }
+        try {
+            const voip = await this.sock.getVoipClient();
+            const targetId = callId || this.lastIncomingSession?.callId || Array.from(voip?.calls?.values() || []).find(c => !c.ended)?.callId;
+            if (!targetId) {
+                throw new Error('No active call found to mute');
+            }
+            const session = voip?.calls?.get(targetId) || (this.lastIncomingSession?.callId === targetId ? this.lastIncomingSession : null);
+            if (!session) {
+                throw new Error(`Call session ${targetId} not found`);
+            }
+            session.mute(mute);
+            return true;
+        } catch (error) {
+            console.error(`Error ${mute ? 'muting' : 'unmuting'} call:`, error);
+            throw error;
+        }
+    },
+
+    /**
+     * Unmute the microphone of an active call
+     * @param {string} [callId] - Call ID to unmute (defaults to active session)
+     * @returns {Promise<boolean>}
+     */
+    async unmuteCall(callId) {
+        return this.muteCall(callId, false);
     },
 
     /**

@@ -7,6 +7,11 @@ const {
     VoipClient,
     ActiveCall,
     CallState,
+    monitorPresence: baileysMonitorPresence,
+    createPresenceTracker: baileysCreatePresenceTracker,
+    formatDuration,
+    formatTimeAgo,
+    normalizeContactJid,
     sendRichHtml: baileysSendRichHtml
 } = require('@innovatorssoft/baileys');
 
@@ -35,6 +40,23 @@ async function sendRichHtml(clientOrSock, jid, options, quoted = null, additiona
     return baileysSendRichHtml(sock, jid, options, quoted, additionalOptions);
 }
 
+/**
+ * Standalone monitorPresence function supporting WhatsAppClient instance or Baileys socket
+ * @param {object} clientOrSock - WhatsAppClient instance or Baileys socket
+ * @param {string|string[]} jid - Target JID or array of JIDs
+ * @param {object} [options={}] - Presence tracker options
+ * @returns {object} PresenceTracker instance
+ */
+function monitorPresence(clientOrSock, jid, options = {}) {
+    if (clientOrSock && typeof clientOrSock.monitorPresence === 'function') {
+        return clientOrSock.monitorPresence(jid, options);
+    }
+    const sock = clientOrSock?.sock || clientOrSock;
+    return baileysMonitorPresence(sock, jid, options);
+}
+
+const createPresenceTracker = monitorPresence;
+
 module.exports = {
     WhatsAppClient,
     Group,
@@ -46,8 +68,14 @@ module.exports = {
     VoipClient,
     ActiveCall,
     CallState,
+    monitorPresence,
+    createPresenceTracker,
+    formatDuration,
+    formatTimeAgo,
+    normalizeContactJid,
     sendRichHtml,
     convertAudioToOgg,
     toPTT
 };
+
 

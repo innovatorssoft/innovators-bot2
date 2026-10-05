@@ -4,8 +4,7 @@ const { WhatsAppClient,
     renderLatexToPng,
     uploadUnencryptedToWA,
     RichSubMessageType,
-    VoipClient,
-    sendRichHtml
+    monitorPresence
 } = require('./index')
 
 const qrcode = require('qrcode-terminal')
@@ -82,12 +81,53 @@ async function start() {
         console.log('⏳ Client status:', message)
     })
 
+    let presenceMonitor = null;
+
     client.on('connected', (user) => {
         console.log('\n✨ Client is ready!')
         console.log('User:', user.name)
         console.log('Phone:', user.phone)
         console.log('Plateform:', user.platform)
         console.log('isOnline:', user.isOnline)
+
+        const targetJid = ['923001234567@s.whatsapp.net', '923021234567@s.whatsapp.net'];
+
+        // Start presence tracking for target JIDs
+        if (!presenceMonitor) {
+            console.log(`[Presence] Starting presence tracking for: ${targetJid.join(', ')}`);
+            presenceMonitor = monitorPresence(client, targetJid, {
+                logToConsole: false,
+                autoResubscribe: true,
+                timezone: '+05:00',
+                trackMessagesAsPresence: false
+            });
+
+            presenceMonitor.on('online', (data) => {
+                console.log(`🟢 Contact ${data.jid} is ONLINE at ${presenceMonitor.formatTime(data.onlineAt)}`);
+                console.log('online Data', data);
+            });
+
+            presenceMonitor.on('offline', (data) => {
+                console.log(`[Presence Event] 🟡 Contact ${data.jid} is OFFLINE at ${presenceMonitor.formatTime(data.offlineAt)}`);
+                console.log(`[Presence Event] ⏱️ Duration: ${data.duration}`);
+                if (data.lastSeen) {
+                    console.log(`[Presence Event] 👁️ Last Seen: ${presenceMonitor.formatTime(data.lastSeen)}`);
+                }
+                console.log('offline Data', data);
+            });
+
+            presenceMonitor.on('session', (session) => {
+                console.log(`[Presence Event] 🔴 Session completed for ${session.jid}:`);
+                console.log(`  • ⏱️ Started : ${presenceMonitor.formatDateTime(session.onlineAt)}`);
+                console.log(`  • ⏱️ Ended   : ${presenceMonitor.formatDateTime(session.offlineAt)}`);
+                console.log(`  • ⏱️ Duration: ${session.duration} (${session.durationMs}ms)`);
+                console.log('session Data', session);
+            });
+
+            presenceMonitor.on('error', (err) => {
+                console.error(`[Presence UPDATE] Error: ${err.message}`);
+            });
+        }
     })
 
     // Handle LID mapping updates
@@ -164,6 +204,74 @@ async function start() {
         const winner = data.pollUpdate.reduce((prev, current) =>
             prev.voters.length > current.voters.length ? prev : current);
         console.log(`--> The Winner Is ${winner.name} With ${winner.voters.length} votes`);
+    });
+
+    let lastIncomingSession = null;
+
+    // Register VoIP Incoming Call Event Listener
+    client.on('call.incoming', async (session) => {
+        lastIncomingSession = session;
+        console.log(`\n📞 [VoIP] Incoming ${session.isVideo ? 'Video' : 'Voice'} Call!`);
+        console.log(`   Call ID: ${session.callId}`);
+        console.log(`   From: ${session.peerJid}`);
+        console.log(`   Caller PN: ${session.callerPn || 'N/A'}`);
+        console.log(`   Status: ${session.status} (waiting: ${session.isWaiting})`);
+
+        // Register lifecycle event listeners
+        session.on('stateChange', (state) => console.log(`[VoIP] Call ${session.callId} state: ${state}`));
+        session.on('accepted', () => console.log(`[VoIP] Call ${session.callId} accepted!`));
+        session.on('connected', () => console.log(`[VoIP] Call ${session.callId} connected! 🟢`));
+        session.on('audioReady', () => console.log(`[VoIP] Call ${session.callId} audio ready! 🎵`));
+        session.on('streaming', () => console.log(`[VoIP] Call ${session.callId} audio streaming active! 📡`));
+        session.on('rejected', (reason) => console.log(`[VoIP] Call ${session.callId} rejected: ${reason}`));
+        session.on('ended', (reason) => {
+            console.log(`[VoIP] Call ${session.callId} ended: ${reason}`);
+            if (lastIncomingSession?.callId === session.callId) {
+                lastIncomingSession = null;
+            }
+        });
+        session.on('audio', (pcmChunk) => {
+            // Decrypted inbound PCM audio chunk received from caller
+        });
+
+        // Automatically accept the incoming call and play audio.mp3
+        const autoAcceptAndStream = async () => {
+            if (session.ended) return;
+            try {
+                const audioPath = path.resolve(__dirname, 'audio.mp3');
+                const audioSource = fs.existsSync(audioPath) ? audioPath : './audio.mp3';
+                console.log(`[VoIP] Automatically accepting incoming call ${session.callId} with audio: ${audioSource}...`);
+                await session.accept({
+                    audioSource,
+                    repeatAudio: false
+                });
+                if (session.ended) return;
+                console.log(`[VoIP] Call ${session.callId} accepted automatically, streaming audio.mp3.`);
+
+                // Notify caller that call was accepted and audio is streaming
+                await client.sendMessage(session.peerJid, {
+                    text: `📞 *Incoming Call Automatically Accepted!*\n` +
+                        `• Call ID: \`${session.callId}\`\n` +
+                        `• Audio: Streaming \`audio.mp3\` 🎵\n\n` +
+                        `Commands to control:\n` +
+                        `• \`!endcall ${session.callId}\` - End call\n` +
+                        `• \`!mute\` / \`!unmute\` - Mute/unmute microphone`
+                });
+            } catch (err) {
+                if (!session.ended) {
+                    console.error(`[VoIP] Error auto-accepting call ${session.callId}:`, err);
+                }
+            }
+        };
+
+        if (session.isWaiting) {
+            console.log(`[VoIP] Call ${session.callId} is queued in waiting list, will auto-accept once unblocked.`);
+            session.once('ringing', () => {
+                void autoAcceptAndStream();
+            });
+        } else {
+            void autoAcceptAndStream();
+        }
     });
 
     client.on('call', (call) => {
@@ -359,8 +467,8 @@ async function start() {
             case '!ptt':
                 const voiceAudio = fs.existsSync('./example.mp3') ? './example.mp3' :
                     (fs.existsSync('./audio.mp3') ? './audio.mp3' :
-                    (fs.existsSync('./example.wav') ? './example.wav' :
-                    (fs.existsSync('./voice.ogg') ? './voice.ogg' : null)));
+                        (fs.existsSync('./example.wav') ? './example.wav' :
+                            (fs.existsSync('./voice.ogg') ? './voice.ogg' : null)));
                 if (voiceAudio) {
                     // Send as PTT Voice Note - automatically converts audio to OGG Opus
                     await client.sendMedia(msgFrom, voiceAudio, {
@@ -616,146 +724,308 @@ async function start() {
                 }
                 break
 
-            case '!call':
+            case '!call': {
                 try {
+                    const parts = args && args.trim() ? args.trim().split(/\s+/) : [];
                     let targetJid = msgFrom;
-                    if (args) {
-                        targetJid = args.includes('@') ? args.trim() : `${args.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+                    let targetAudio = './audio.mp3';
+
+                    if (parts.length > 0) {
+                        if (parts[0].endsWith('.mp3') || parts[0].endsWith('.wav') || parts[0].endsWith('.ogg')) {
+                            targetAudio = parts[0];
+                            if (parts[1]) {
+                                targetJid = parts[1].includes('@') ? parts[1] : `${parts[1].replace(/\D/g, '')}@s.whatsapp.net`;
+                            }
+                        } else {
+                            targetJid = parts[0].includes('@') ? parts[0] : `${parts[0].replace(/\D/g, '')}@s.whatsapp.net`;
+                            if (parts[1]) {
+                                targetAudio = parts[1];
+                            }
+                        }
                     }
-                    console.log(`\n📞 Initiating voice call with audio streaming to ${targetJid}...`);
-                    const audioPath = fs.existsSync('./audio.mp3') ? './audio.mp3' : 'silence';
+
+                    await client.sendMessage(msgFrom, { text: `📞 Initiating voice call to ${targetJid} (audio: ${targetAudio})...` }, { quoted: msg.raw });
                     const call = await client.initiateCall(targetJid, {
-                        audioSource: audioPath,      // MP3/WAV file path or "silence"
-                        durationMs: 30000,           // Maximum playback duration in ms
-                        repeatAudio: true,           // Loop audio seamlessly until durationMs is reached
-                        preRingingTimeoutMs: 20000   // Timeout if recipient never reaches ringing
+                        audioSource: targetAudio,
+                        durationMs: 42 * 1000,
+                        repeatAudio: true
                     });
-
                     if (call) {
-                        call.on('ringing', () => console.log(`[${call.callId}] 🔔 Remote device is ringing...`));
-                        call.on('accepted', () => console.log(`[${call.callId}] 📞 Call answered!`));
-                        call.on('connected', () => console.log(`[${call.callId}] 🎉 Media connection established!`));
-                        call.on('audioReady', () => console.log(`[${call.callId}] 🎵 Audio pipeline ready!`));
-                        call.on('streaming', () => console.log(`[${call.callId}] 🔊 Streaming audio (${audioPath})`));
-                        call.on('audio', (pcmChunk) => { /* Incoming 16 kHz Float32Array PCM */ });
-                        call.on('ended', (reason) => console.log(`[${call.callId}] 📱 Call ended:`, reason));
-                        call.on('error', (err) => console.error(`[${call.callId}] ❌ Call error:`, err));
+                        call.on('ringing', () => console.log(`[Example] Call ${call.callId} is ringing...`));
+                        call.on('accepted', () => console.log(`[Example] Call ${call.callId} accepted by recipient`));
+                        call.on('connected', () => console.log(`[Example] Call ${call.callId} connected!`));
+                        call.on('audioReady', () => console.log(`[Example] Call ${call.callId} audio pipeline ready`));
+                        call.on('streaming', () => console.log(`[Example] Call ${call.callId} streaming audio`));
+                        call.on('ended', (reason) => console.log(`[Example] Call ${call.callId} ended: ${reason}`));
+                        call.on('error', (err) => console.error(`[Example] Call error:`, err));
                     }
-
-                    await client.sendMessage(msgFrom, `📞 Voice call initiated to ${targetJid} with audio streaming (${audioPath})!`);
-
-                } catch (error) {
-                    console.error('Error initiating voice call:', error);
-                    await client.sendMessage(msgFrom, `Failed to initiate call: ${error.message}`);
+                } catch (err) {
+                    console.error(err);
+                    await client.sendMessage(msgFrom, { text: `Call error: ${err.message}` }, { quoted: msg.raw });
                 }
-                break
+                break;
+            }
 
-            case '!videocall':
+            case '!vcall':
+            case '!videocall': {
                 try {
+                    const parts = args && args.trim() ? args.trim().split(/\s+/) : [];
                     let targetJid = msgFrom;
-                    if (args) {
-                        targetJid = args.includes('@') ? args.trim() : `${args.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
-                    }
-                    console.log(`\n📹 Initiating video call with WebAssembly video/audio streaming to ${targetJid}...`);
-                    const videoPath = fs.existsSync('./example.mp4') ? './example.mp4' : null;
-                    const audioPath = fs.existsSync('./audio.mp3') ? './audio.mp3' : (videoPath || 'silence');
+                    let targetVideo = './example.mp4';
 
-                    const videoCall = await client.initiateCall(targetJid, {
+                    if (parts.length > 0) {
+                        if (parts[0].endsWith('.mp4') || parts[0].endsWith('.mkv') || parts[0].endsWith('.mov') || parts[0].endsWith('.avi')) {
+                            targetVideo = parts[0];
+                            if (parts[1]) {
+                                targetJid = parts[1].includes('@') ? parts[1] : `${parts[1].replace(/\D/g, '')}@s.whatsapp.net`;
+                            }
+                        } else {
+                            targetJid = parts[0].includes('@') ? parts[0] : `${parts[0].replace(/\D/g, '')}@s.whatsapp.net`;
+                            if (parts[1]) {
+                                targetVideo = parts[1];
+                            }
+                        }
+                    }
+
+                    await client.sendMessage(msgFrom, { text: `📹 Initiating video call to ${targetJid} (video: ${targetVideo})...` }, { quoted: msg.raw });
+                    const call = await client.initiateCall(targetJid, {
                         isVideo: true,
-                        videoSource: videoPath,
-                        audioSource: audioPath,
-                        videoWidth: 640,
-                        videoHeight: 480,
+                        videoSource: targetVideo,
+                        audioSource: './audio.mp3',
                         videoFps: 15,
-                        isHorizontal: false,
-                        durationMs: 30000,
+                        isHorizontal: true, // true for horizontal/landscape, false for vertical/portrait
+                        durationMs: 30 * 1000,
                         repeatAudio: true,
                         videoLoop: true
                     });
 
-                    if (videoCall) {
-                        videoCall.on('ringing', () => console.log(`[${videoCall.callId}] 🔔 Video call is ringing...`));
-                        videoCall.on('accepted', () => console.log(`[${videoCall.callId}] 📞 Video call accepted!`));
-                        videoCall.on('connected', () => console.log(`[${videoCall.callId}] 🎉 Video call connected!`));
-                        videoCall.on('videoStarted', () => console.log(`[${videoCall.callId}] 🎬 Video stream started`));
-                        videoCall.on('videoEnded', () => console.log(`[${videoCall.callId}] 🎬 Video stream ended`));
-                        videoCall.on('audioReady', () => console.log(`[${videoCall.callId}] 🎵 Audio pipeline ready!`));
-                        videoCall.on('streaming', () => console.log(`[${videoCall.callId}] 🔊 Streaming media`));
-                        videoCall.on('ended', (reason) => console.log(`[${videoCall.callId}] 📱 Video Call ended:`, reason));
-                        videoCall.on('error', (err) => console.error(`[${videoCall.callId}] ❌ Video Call error:`, err));
+                    if (call) {
+                        call.on('ringing', () => console.log(`[Example] Video Call ${call.callId} is ringing...`));
+                        call.on('accepted', () => console.log(`[Example] Video Call ${call.callId} accepted by recipient`));
+                        call.on('connected', () => console.log(`[Example] Video Call ${call.callId} connected!`));
+                        call.on('videoStarted', () => console.log(`[Example] Video Call ${call.callId} video stream started`));
+                        call.on('videoEnded', () => console.log(`[Example] Video Call ${call.callId} video stream ended`));
+                        call.on('audioReady', () => console.log(`[Example] Video Call ${call.callId} audio pipeline ready`));
+                        call.on('streaming', () => console.log(`[Example] Video Call ${call.callId} streaming media`));
+                        call.on('ended', (reason) => console.log(`[Example] Video Call ${call.callId} ended: ${reason}`));
+                        call.on('error', (err) => console.error(`[Example] Video Call error:`, err));
                     }
-
-                    await client.sendMessage(msgFrom, `📹 Video call initiated to ${targetJid} with streaming!`);
-                } catch (error) {
-                    console.error('Error initiating video call:', error);
-                    await client.sendMessage(msgFrom, `Failed to initiate video call: ${error.message}`);
+                } catch (err) {
+                    console.error(err);
+                    await client.sendMessage(msgFrom, { text: `Video Call error: ${err.message}` }, { quoted: msg.raw });
                 }
-                break
+                break;
+            }
 
-            case '!multicall':
-            case '!batchcalls':
+            case '!callinfo':
+            case '!activecalls': {
                 try {
-                    let recipients = [msgFrom];
-                    if (args) {
-                        recipients = args.split(',').map(s => s.trim()).filter(Boolean).map(n => n.includes('@') ? n : `${n.replace(/[^0-9]/g, '')}@s.whatsapp.net`);
+                    const active = await client.getActiveCalls();
+                    const stats = await client.getVoipMemoryStats();
+                    const rssMb = stats?.process?.rssMb ?? Math.round((stats?.rss || 0) / 1024 / 1024);
+                    const workers = stats?.resourceManager?.activeWorkers ?? stats?.activeWorkers ?? stats?.workerCount ?? 0;
+                    const relays = stats?.resourceManager?.activeRelayConnections ?? stats?.relayConnections ?? stats?.relayConnectionCount ?? 0;
+                    if (!active || active.length === 0) {
+                        await client.sendMessage(msgFrom, {
+                            text: `📞 No active VoIP calls.\n\n📊 *VoIP Resource Stats:*\n• RSS: ${rssMb} MB\n• Active Workers: ${workers}\n• Active Relays: ${relays}`
+                        }, { quoted: msg.raw });
+                    } else {
+                        const list = active.map(c => `• [${(c.id || c.callId || '').slice(0, 8)}] -> ${c.jid || c.peerJid} (${c.status || c.state}) [${c.direction || 'outgoing'}] [started: ${new Date(c.startedAt).toLocaleTimeString()}]`).join('\n');
+                        await client.sendMessage(msgFrom, {
+                            text: `📞 *Active Calls (${active.length}):*\n\n${list}\n\n📊 *VoIP Resource Stats:*\n• RSS: ${rssMb} MB | Workers: ${workers}`
+                        }, { quoted: msg.raw });
                     }
-                    const audioPath = fs.existsSync('./audio.mp3') ? './audio.mp3' : 'silence';
-                    const requests = recipients.map(jid => ({
-                        jid,
+                } catch (err) {
+                    await client.sendMessage(msgFrom, { text: `Error: ${err.message}` }, { quoted: msg.raw });
+                }
+                break;
+            }
+
+            case '!calls':
+            case '!multicall':
+            case '!batchcalls': {
+                try {
+                    const targets = args && args.trim() ? (args.includes(',') ? args.split(',').map(s => s.trim()) : args.trim().split(/\s+/)) : [msgFrom];
+                    await client.sendMessage(msgFrom, { text: `📞 Initiating concurrent calls to ${targets.length} recipients...` }, { quoted: msg.raw });
+                    const requests = targets.map(target => ({
+                        jid: target.includes('@') ? target : `${target.replace(/\D/g, '')}@s.whatsapp.net`,
                         options: {
-                            audioSource: audioPath,
+                            audioSource: './audio.mp3',
                             durationMs: 30000,
                             repeatAudio: true
                         }
                     }));
-
-                    console.log(`\n📞 Initiating batch concurrent calls to ${recipients.length} recipients...`);
-                    const batchCalls = await client.initiateCalls(requests);
-
-                    batchCalls.forEach(c => {
-                        if (c) {
-                            c.on('ringing', () => console.log(`[${c.callId}] 🔔 Ringing ${c.peerJid}...`));
-                            c.on('accepted', () => console.log(`[${c.callId}] 📞 Answered by ${c.peerJid}`));
-                            c.on('connected', () => console.log(`[${c.callId}] 🎉 Connected to ${c.peerJid}`));
-                            c.on('ended', (reason) => console.log(`[${c.callId}] 📱 Ended:`, reason));
+                    const calls = await client.initiateCalls(requests);
+                    for (const call of calls) {
+                        if (call) {
+                            call.on('ringing', () => console.log(`[Example] Call ${call.callId} is ringing...`));
+                            call.on('connected', () => console.log(`[Example] Call ${call.callId} connected!`));
+                            call.on('ended', (reason) => console.log(`[Example] Call ${call.callId} ended: ${reason}`));
                         }
-                    });
-
-                    await client.sendMessage(msgFrom, `📞 Batch initiated ${batchCalls.length} concurrent calls!`);
-                } catch (error) {
-                    console.error('Error initiating batch calls:', error);
-                    await client.sendMessage(msgFrom, `Failed to initiate batch calls: ${error.message}`);
-                }
-                break
-
-            case '!activecalls':
-                try {
-                    const activeSummaries = await client.getActiveCalls();
-                    const activeCount = await client.getActiveCallCount();
-                    let response = `📞 *Active Calls (${activeCount})*\n\n`;
-                    if (activeSummaries && activeSummaries.length > 0) {
-                        activeSummaries.forEach((call, idx) => {
-                            response += `${idx + 1}. Call ID: \`${call.callId}\`\n   To: ${call.peerJid || call.phoneNumber}\n   Status: ${call.status || call.state}\n\n`;
-                        });
-                    } else {
-                        response += `No active calls currently running.`;
                     }
-                    await client.sendMessage(msgFrom, response);
-                } catch (error) {
-                    console.error('Error getting active calls:', error);
-                    await client.sendMessage(msgFrom, `Failed to get active calls: ${error.message}`);
+                    await client.sendMessage(msgFrom, { text: `✅ Successfully initiated ${calls.length} concurrent calls!` }, { quoted: msg.raw });
+                } catch (err) {
+                    console.error(err);
+                    await client.sendMessage(msgFrom, { text: `Multi-call error: ${err.message}` }, { quoted: msg.raw });
                 }
-                break
+                break;
+            }
 
-            case '!endallcalls':
+            case '!endcall': {
                 try {
-                    await client.endAllCalls();
-                    await client.sendMessage(msgFrom, `🛑 All active calls have been ended.`);
-                } catch (error) {
-                    console.error('Error ending all calls:', error);
-                    await client.sendMessage(msgFrom, `Failed to end calls: ${error.message}`);
+                    const targetCallId = args && args.trim() ? args.trim() : '';
+                    if (!targetCallId) {
+                        await client.sendMessage(msgFrom, { text: `Usage: !endcall <callId>` }, { quoted: msg.raw });
+                    } else {
+                        await client.endCall(targetCallId);
+                        await client.sendMessage(msgFrom, { text: `📞 Terminated call ${targetCallId}` }, { quoted: msg.raw });
+                    }
+                } catch (err) {
+                    await client.sendMessage(msgFrom, { text: `End call error: ${err.message}` }, { quoted: msg.raw });
                 }
-                break
+                break;
+            }
+
+            case '!endallcalls': {
+                try {
+                    const count = await client.getActiveCallCount();
+                    await client.endAllCalls();
+                    await client.sendMessage(msgFrom, { text: `📞 Terminated all ${count} active calls.` }, { quoted: msg.raw });
+                } catch (err) {
+                    await client.sendMessage(msgFrom, { text: `Error: ${err.message}` }, { quoted: msg.raw });
+                }
+                break;
+            }
+
+            case '!acceptcall': {
+                try {
+                    const voip = await client.getVoipClient();
+                    const targetCallId = args && args.trim() ? args.trim() : (lastIncomingSession?.callId || Array.from(voip?.calls?.values() || []).find(c => c.isIncoming && !c.ended)?.callId);
+                    if (!targetCallId) {
+                        await client.sendMessage(msgFrom, { text: `❌ No incoming call found to accept. Usage: !acceptcall [callId]` }, { quoted: msg.raw });
+                        console.log("No incoming call found to accept.");
+                        break;
+                    }
+                    const existingSession = voip?.calls?.get(targetCallId) || (lastIncomingSession?.callId === targetCallId ? lastIncomingSession : null);
+                    if (existingSession && (existingSession.status === 'accepted' || existingSession.status === 'connected' || existingSession.status === 'audio_ready' || existingSession.status === 'streaming')) {
+                        await client.sendMessage(msgFrom, { text: `ℹ️ Call ${targetCallId} is already accepted (status: ${existingSession.status}).` }, { quoted: msg.raw });
+                        break;
+                    }
+                    await client.sendMessage(msgFrom, { text: `📞 Accepting incoming call ${targetCallId}...` }, { quoted: msg.raw });
+                    const session = await client.acceptCall(targetCallId, undefined, false, {
+                        audio: './audio.mp3' // Uses the in-process silence / audio generator
+                    });
+                    await client.sendMessage(msgFrom, { text: `✅ Call ${targetCallId} accepted! Audio streaming.` }, { quoted: msg.raw });
+                } catch (err) {
+                    console.error(err);
+                    await client.sendMessage(msgFrom, { text: `Accept call error: ${err.message}` }, { quoted: msg.raw });
+                }
+                break;
+            }
+
+            case '!rejectcall': {
+                try {
+                    const voip = await client.getVoipClient();
+                    const parts = args && args.trim() ? args.trim().split(/\s+/) : [];
+                    let targetCallId = parts[0];
+                    let reason = parts[1] || 'declined';
+                    if (!targetCallId || targetCallId === 'busy' || targetCallId === 'declined') {
+                        if (targetCallId === 'busy' || targetCallId === 'declined') {
+                            reason = targetCallId;
+                        }
+                        targetCallId = lastIncomingSession?.callId || Array.from(voip?.calls?.values() || []).find(c => c.isIncoming && !c.ended)?.callId;
+                    }
+                    if (!targetCallId) {
+                        await client.sendMessage(msgFrom, { text: `❌ No incoming call found to reject. Usage: !rejectcall [callId] [reason]` }, { quoted: msg.raw });
+                        break;
+                    }
+                    await client.rejectCall(targetCallId, undefined, reason);
+                    await client.sendMessage(msgFrom, { text: `📞 Rejected call ${targetCallId} (reason: ${reason})` }, { quoted: msg.raw });
+                } catch (err) {
+                    console.error(err);
+                    await client.sendMessage(msgFrom, { text: `Reject call error: ${err.message}` }, { quoted: msg.raw });
+                }
+                break;
+            }
+
+            case '!mute': {
+                try {
+                    const voip = await client.getVoipClient();
+                    const targetCallId = args && args.trim()
+                        ? args.trim()
+                        : (lastIncomingSession?.callId || Array.from(voip?.calls?.values() || []).find(c => !c.ended)?.callId);
+                    if (!targetCallId) {
+                        await client.sendMessage(msgFrom, { text: `❌ No active call to mute. Usage: !mute [callId]` }, { quoted: msg.raw });
+                        break;
+                    }
+                    const session = voip?.calls?.get(targetCallId) || (lastIncomingSession?.callId === targetCallId ? lastIncomingSession : null);
+                    if (!session) {
+                        await client.sendMessage(msgFrom, { text: `❌ Call ${targetCallId} not found.` }, { quoted: msg.raw });
+                        break;
+                    }
+                    session.mute(true);
+                    await client.sendMessage(msgFrom, { text: `🔇 Call ${targetCallId} is now muted.` }, { quoted: msg.raw });
+                } catch (err) {
+                    await client.sendMessage(msgFrom, { text: `Mute error: ${err.message}` }, { quoted: msg.raw });
+                }
+                break;
+            }
+
+            case '!unmute': {
+                try {
+                    const voip = await client.getVoipClient();
+                    const targetCallId = args && args.trim()
+                        ? args.trim()
+                        : (lastIncomingSession?.callId || Array.from(voip?.calls?.values() || []).find(c => !c.ended)?.callId);
+                    if (!targetCallId) {
+                        await client.sendMessage(msgFrom, { text: `❌ No active call to unmute. Usage: !unmute [callId]` }, { quoted: msg.raw });
+                        break;
+                    }
+                    const session = voip?.calls?.get(targetCallId) || (lastIncomingSession?.callId === targetCallId ? lastIncomingSession : null);
+                    if (!session) {
+                        await client.sendMessage(msgFrom, { text: `❌ Call ${targetCallId} not found.` }, { quoted: msg.raw });
+                        break;
+                    }
+                    session.unmute();
+                    await client.sendMessage(msgFrom, { text: `🔊 Call ${targetCallId} is now unmuted.` }, { quoted: msg.raw });
+                } catch (err) {
+                    await client.sendMessage(msgFrom, { text: `Unmute error: ${err.message}` }, { quoted: msg.raw });
+                }
+                break;
+            }
+
+            case '!voipstats': {
+                try {
+                    const stats = await client.getVoipMemoryStats();
+                    if (!stats) {
+                        await client.sendMessage(msgFrom, { text: `VoIP subsystem not initialized.` }, { quoted: msg.raw });
+                        break;
+                    }
+                    const rssMb = stats?.process?.rssMb ?? Math.round((stats?.rss || 0) / 1024 / 1024);
+                    const heapUsedMb = stats?.process?.heapUsedMb ?? Math.round((stats?.heapUsed || 0) / 1024 / 1024);
+                    const heapTotalMb = stats?.process?.heapTotalMb ?? Math.round((stats?.heapTotal || 0) / 1024 / 1024);
+                    const externalMb = stats?.process?.externalMb ?? Math.round((stats?.external || 0) / 1024 / 1024);
+                    const activeCalls = stats?.calls?.activeCalls ?? stats?.activeCalls ?? stats?.activeCallCount ?? 0;
+                    const activeWorkers = stats?.resourceManager?.activeWorkers ?? stats?.activeWorkers ?? stats?.workerCount ?? 0;
+                    const activeRelays = stats?.resourceManager?.activeRelayConnections ?? stats?.relayConnections ?? stats?.relayConnectionCount ?? 0;
+                    const activeFfmpeg = stats?.resourceManager?.activeFfmpegProcesses ?? stats?.ffmpegProcesses ?? stats?.ffmpegProcessCount ?? 0;
+                    const cachedModules = stats?.resourceManager?.compiledModulesCached ?? stats?.cachedModules ?? 0;
+
+                    const text = `📊 *VoIP Subsystem & Memory Stats:*\n\n` +
+                        `• *Process RSS:* ${rssMb} MB\n` +
+                        `• *Heap Used:* ${heapUsedMb} MB / ${heapTotalMb} MB\n` +
+                        `• *External Memory:* ${externalMb} MB\n` +
+                        `• *Active VoIP Calls:* ${activeCalls}\n` +
+                        `• *Active Workers:* ${activeWorkers}\n` +
+                        `• *Active Relays:* ${activeRelays}\n` +
+                        `• *FFmpeg Processes:* ${activeFfmpeg}\n` +
+                        `• *Cached WASM Modules:* ${cachedModules}`;
+                    await client.sendMessage(msgFrom, { text }, { quoted: msg.raw });
+                } catch (err) {
+                    await client.sendMessage(msgFrom, { text: `Error fetching VoIP stats: ${err.message}` }, { quoted: msg.raw });
+                }
+                break;
+            }
 
             case '!offercall':
                 try {
@@ -896,12 +1166,18 @@ async function start() {
                     `• !statusvoice - Post a voice note status\n` +
                     `• !groupstatus - Post a status directly inside a group (@g.us)\n\n` +
 
-                    `*📞 Calls*\n` +
-                    `• !call <number> - Voice call with WebAssembly audio streaming & repeat\n` +
-                    `• !videocall <number> - Video call with WebAssembly video/audio streaming\n` +
-                    `• !multicall <num1,num2> - Batch concurrent calls\n` +
-                    `• !activecalls - Show active calls count & summary\n` +
+                    `*📞 Calls & VoIP*\n` +
+                    `• !call [number/audio] - Voice call with WebAssembly audio streaming\n` +
+                    `• !vcall / !videocall [number/video] - Video call with WebAssembly streaming\n` +
+                    `• !calls / !multicall <num1,num2> - Batch concurrent calls\n` +
+                    `• !callinfo / !activecalls - Active calls & VoIP memory/resource stats\n` +
+                    `• !endcall <callId> - Terminate a specific call\n` +
                     `• !endallcalls - Terminate all active calls\n` +
+                    `• !acceptcall [callId] - Answer incoming call with audio streaming\n` +
+                    `• !rejectcall [callId] [reason] - Reject incoming call (declined/busy)\n` +
+                    `• !mute [callId] - Mute microphone on active call\n` +
+                    `• !unmute [callId] - Unmute microphone on active call\n` +
+                    `• !voipstats - Subsystem VoIP and memory statistics\n` +
                     `• !offercall - Offer a voice call (signaling only)\n` +
                     `• !cancelcall - Cancel last outgoing call\n\n` +
 

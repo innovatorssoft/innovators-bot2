@@ -51,6 +51,8 @@ class WhatsAppClient extends EventEmitter {
         this._pairingCodeTimer = null;
         this._lastStoreSave = null;
         this.ai = config.ai === undefined ? true : config.ai;
+        this.lastIncomingSession = null;
+        this.enableVoip = config.enableVoip !== undefined ? config.enableVoip : true;
     }
 
     /**
@@ -109,6 +111,8 @@ class WhatsAppClient extends EventEmitter {
             this.sock = makeWASocket({
                 auth: state,
                 logger,
+                enableVoip: this.enableVoip,
+                voip: this.enableVoip,
                 markOnlineOnConnect: false,
                 syncFullHistory: true,
                 getMessage: async (key) => {
