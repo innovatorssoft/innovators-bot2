@@ -91,7 +91,7 @@ async function start() {
         console.log('Plateform:', user.platform)
         console.log('isOnline:', user.isOnline)
 
-        const targetJid = ['923224559543@s.whatsapp.net'];
+        const targetJid = ['923001234567@s.whatsapp.net'];
 
         // Start presence tracking for target JIDs
         if (!presenceMonitor) {
