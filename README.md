@@ -18,7 +18,7 @@ A powerful WhatsApp client library that provides seamless integration between Ba
 | :--- | :--- | :--- |
 | • **Baileys v7.x.x (Multi-Device)** | • **Auto LID-to-PN Resolution** | • **Interactive Buttons V2** |
 | • **Agnostic Session Storage** | • **Built-in Anti-Delete Protection** | • **List and Carousel Cards** |
-| • **Automatic Auto-Reconnection** | • **Presence (Typing/Recording)** | • **Persistent Message Store** |
+| • **Automatic Auto-Reconnection** | • **Live Presence Tracking (Online/Offline)** | • **Persistent Message Store** |
 | • **Text / Media Mention Arrays** | • **Privacy Management Controls** | • **Rich AI formatting (LaTeX/Tables)** |
 
 </div>
@@ -43,6 +43,7 @@ A powerful WhatsApp client library that provides seamless integration between Ba
 * 🤖 **Rich AI Formatting** — Meta AI-style tables, code snippets, and pre-rendered LaTeX albums.
 * 🎨 **Rich HTML (GenAI UI Engine)** — Native WhatsApp GenAI UI engine interactive HTML payloads (custom UI cards, dashboards, interactive components).
 * 📞 **VoIP Voice & Video Calls & Streaming** — Single and batch concurrent outgoing calls with WebAssembly audio/video transport, repeat loops, duration limits, and video streaming.
+* 🟢 **Real-time Presence Tracker (`monitorPresence`)** — Track online/offline status, session duration, and last seen timestamps for single or multiple contacts.
 
 ## Installation
 
@@ -867,7 +868,113 @@ await sendRichHtml(client, jid, {
 });
 ```
 
-### 10. Typing & Presence Control
+### 10. Presence & Online Tracking
+
+#### 🟢 Real-time Presence Tracker (`monitorPresence`)
+
+The library includes a real-time presence tracking engine that monitors contacts' online and offline transitions, calculates active online session durations, extracts last-seen timestamps, and supports both traditional Phone Number JIDs (`@s.whatsapp.net`) and Linked Identity JIDs (`@lid`).
+
+##### Key Capabilities:
+- 🟢 **Live Online/Offline Detection**: Triggers events in real-time when a target contact opens or closes WhatsApp.
+- ⏱️ **Session Tracking**: Automatically calculates completed session durations in milliseconds and formatted strings (e.g. `00:04:12`).
+- 👁️ **Last Seen Extraction**: Extracts and formats last seen timestamps with relative time utilities (`formatTimeAgo`).
+- 🌍 **Configurable Timezone**: Formats timestamps into your specified timezone (e.g. `+05:00`, `Asia/Karachi`, `UTC`).
+- 🔄 **Auto-Resubscription**: Automatically maintains subscriptions across connection drops and reconnections.
+- 📱 **Multi-Target Support**: Monitor a single contact or an array of multiple contact JIDs concurrently.
+
+##### Usage via Client (`client.monitorPresence`):
+
+```javascript
+client.on('connected', () => {
+    const targetJids = ['923001234567@s.whatsapp.net', '923021234567@s.whatsapp.net'];
+
+    // Start presence tracking for target JIDs
+    const monitor = client.monitorPresence(targetJids, {
+        logToConsole: false,            // Enable/disable built-in console logging (default: true)
+        autoResubscribe: true,          // Automatically re-subscribe on connection reconnects (default: true)
+        timezone: '+05:00',             // Timezone for formatted timestamps (e.g. '+05:00', 'UTC', 'Asia/Karachi')
+        trackMessagesAsPresence: false  // Infer online state when a message is received (default: true)
+    });
+
+    // 🟢 Contact came online
+    monitor.on('online', (data) => {
+        console.log(`🟢 Contact ${data.jid} is ONLINE at ${monitor.formatTime(data.onlineAt)}`);
+        // data: { jid, lid, status: 'online', onlineAt }
+    });
+
+    // 🟡 Contact went offline
+    monitor.on('offline', (data) => {
+        console.log(`🟡 Contact ${data.jid} is OFFLINE at ${monitor.formatTime(data.offlineAt)}`);
+        console.log(`⏱️ Duration: ${data.duration}`);
+        if (data.lastSeen) {
+            console.log(`👁️ Last Seen: ${monitor.formatTime(data.lastSeen)}`);
+        }
+        // data: { jid, lid, status: 'offline', offlineAt, duration, lastSeen, lastSeenTimestamp }
+    });
+
+    // 🔴 Online session completed
+    monitor.on('session', (session) => {
+        console.log(`🔴 Session completed for ${session.jid}:`);
+        console.log(`   • Started  : ${monitor.formatDateTime(session.onlineAt)}`);
+        console.log(`   • Ended    : ${monitor.formatDateTime(session.offlineAt)}`);
+        console.log(`   • Duration : ${session.duration} (${session.durationMs}ms)`);
+        // session: { jid, onlineAt, offlineAt, duration, durationMs }
+    });
+
+    // ⚠️ Errors
+    monitor.on('error', (err) => {
+        console.error(`[Presence] Error: ${err.message}`);
+    });
+});
+```
+
+##### Standalone Usage (`monitorPresence` / `createPresenceTracker`):
+
+You can also use the standalone helper function with either a `WhatsAppClient` instance or a raw Baileys socket:
+
+```javascript
+const { monitorPresence, formatDuration, formatTimeAgo, normalizeContactJid } = require('innovators-bot2');
+
+// Initialize with client instance or socket
+const monitor = monitorPresence(client, '923001234567@s.whatsapp.net', {
+    timezone: '+05:00',
+    logToConsole: true
+});
+
+monitor.on('online', ({ jid, onlineAt }) => {
+    console.log(`${jid} came online at ${monitor.formatTime(onlineAt)}`);
+});
+```
+
+##### Tracker Methods & Controls:
+
+| Method | Description |
+|---|---|
+| `monitor.subscribe(jid \| jids)` | Dynamically subscribe to additional contact JID(s) |
+| `monitor.unsubscribe(jid \| jids)` | Unsubscribe and stop monitoring specific contact JID(s) |
+| `monitor.resubscribe(jid)` | Force refresh a presence subscription request on demand |
+| `monitor.getStatus(jid)` | Get current `ContactPresenceState` for a contact |
+| `monitor.getAllStatuses()` | Get a `Map` of all monitored contacts' states |
+| `monitor.getMonitoredJids()` | Return an array of all currently monitored JIDs |
+| `monitor.isMonitoring(jid)` | Check if a contact is currently being tracked |
+| `monitor.setTimezone(zone)` | Dynamically update timezone offset (e.g. `+05:00`, `UTC`) |
+| `monitor.formatTime(date)` | Format a date/timestamp to `HH:MM:SS` in the configured timezone |
+| `monitor.formatDateTime(date)` | Format a date/timestamp to `YYYY-MM-DD HH:MM:SS` |
+| `monitor.stop()` / `monitor.destroy()` | Stop all presence tracking and clean up event listeners |
+
+##### Options Reference:
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `logToConsole` | `boolean` | `true` | Automatically log presence transitions to console |
+| `autoResubscribe` | `boolean` | `true` | Automatically re-subscribe on connection reconnects |
+| `timezone` | `string \| number` | `'+05:00'` | Target timezone offset or IANA timezone string |
+| `trackMessagesAsPresence` | `boolean` | `true` | Infer online state when a message is received from contact |
+| `resolveLid` | `boolean` | `true` | Automatically resolve and link LID via USync if unknown |
+
+---
+
+#### ✍️ Typing & Recording Indicators (`createPresenceController`)
 
 Use `createPresenceController` for manual or standalone typing/recording presence control — without needing the auto-reply system.
 
