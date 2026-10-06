@@ -52,7 +52,8 @@ class WhatsAppClient extends EventEmitter {
         this._lastStoreSave = null;
         this.ai = config.ai === undefined ? true : config.ai;
         this.lastIncomingSession = null;
-        this.enableVoip = config.enableVoip !== undefined ? config.enableVoip : true;
+        this.voip = config.voip !== undefined ? config.voip : (config.enableVoip !== undefined ? config.enableVoip : true);
+        this.enableVoip = typeof this.voip === 'boolean' ? this.voip : Boolean(this.voip);
         this.markOnlineOnConnect = config.markOnlineOnConnect !== undefined ? config.markOnlineOnConnect : true;
     }
 
@@ -113,7 +114,7 @@ class WhatsAppClient extends EventEmitter {
                 auth: state,
                 logger,
                 enableVoip: this.enableVoip,
-                voip: this.enableVoip,
+                voip: this.voip,
                 markOnlineOnConnect: this.markOnlineOnConnect,
                 syncFullHistory: true,
                 getMessage: async (key) => {

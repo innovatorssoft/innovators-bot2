@@ -56,16 +56,14 @@ const MessageManager = {
             } else if (message.richHtml || message.type === 'richHtml' || message.type === 'html') {
                 const htmlOptions = message.richHtml || message;
                 return await this.sendRichHtml(chatId, htmlOptions, options.quoted || null, options);
+            } else if (message.text !== undefined || message.type === 'text') {
+                messageContent = { text: message.text };
+                const { mentions: textMentions, mentionAll: textMentionAll } = this._handleMentions(message.mentions, message.mentionAll);
+                if (textMentions) messageContent.mentions = textMentions;
+                if (textMentionAll !== undefined) messageContent.mentionAll = textMentionAll;
             } else {
                 // Handle different message types
                 switch (message.type) {
-                    case 'text':
-                        messageContent = { text: message.text };
-                        const { mentions: textMentions, mentionAll: textMentionAll } = this._handleMentions(message.mentions, message.mentionAll);
-                        if (textMentions) messageContent.mentions = textMentions;
-                        if (textMentionAll !== undefined) messageContent.mentionAll = textMentionAll;
-                        break;
-
                     case 'location':
                         messageContent = {
                             location: {
@@ -103,6 +101,11 @@ const MessageManager = {
                         break;
 
                     default:
+                        // Allow native Baileys message objects directly
+                        if (message && typeof message === 'object' && (message.audio || message.video || message.image || message.document || message.sticker || message.react || message.location || message.contacts || message.delete || message.edit || message.buttons || message.templateButtons || message.sections || message.poll || message.interactiveButtons || message.cards)) {
+                            messageContent = message;
+                            break;
+                        }
                         throw new Error('Invalid message type');
                 }
             }

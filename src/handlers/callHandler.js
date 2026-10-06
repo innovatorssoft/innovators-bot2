@@ -19,7 +19,9 @@ async function handleIncomingCall(client, call) {
         await client.emit('call', call);
     } catch (error) {
         console.error('Error in call handler:', error);
-        client.emit('error', error);
+        if (client.listenerCount && client.listenerCount('error') > 0) {
+            client.emit('error', error);
+        }
     }
 }
 
@@ -44,7 +46,9 @@ async function handleVoipIncomingCall(client, session) {
         await client.emit('call:incoming', session);
     } catch (error) {
         console.error('Error in VoIP incoming call handler:', error);
-        client.emit('error', error);
+        if (client.listenerCount && client.listenerCount('error') > 0) {
+            client.emit('error', error);
+        }
     }
 }
 

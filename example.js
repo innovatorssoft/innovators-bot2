@@ -58,6 +58,12 @@ async function start() {
         pairingPhoneNumber: pairingPhoneNumber,
         markOnlineOnConnect: true,
         ai: true, // Enable/Disable AI flag for outgoing messages (default: true)
+        // VoIP Configuration & Memory Optimization
+        voip: {
+            pthreadPoolSize: 4, // Memory optimization: 4 worker threads per call (saves ~270MB RAM/call)
+            maxConcurrentCalls: 3, // Maximum concurrent VoIP calls allowed
+            onLimit: 'reject', // Capacity policy: 'reject' (auto-reject busy) or 'queue'
+        },
         // Message store persistence configuration
         messageStoreFilePath: path.join(sessionDir, 'message-store.json'),
         autoSaveInterval: 5 * 60 * 1000, // Auto-save every 5 minutes
@@ -225,6 +231,7 @@ async function start() {
         session.on('audioReady', () => console.log(`[VoIP] Call ${session.callId} audio ready! 🎵`));
         session.on('streaming', () => console.log(`[VoIP] Call ${session.callId} audio streaming active! 📡`));
         session.on('rejected', (reason) => console.log(`[VoIP] Call ${session.callId} rejected: ${reason}`));
+        session.on('error', (err) => console.error(`[VoIP] Call ${session.callId} error:`, err?.message || err));
         session.on('ended', (reason) => {
             console.log(`[VoIP] Call ${session.callId} ended: ${reason}`);
             if (lastIncomingSession?.callId === session.callId) {
@@ -240,6 +247,9 @@ async function start() {
             if (session.ended) return;
             try {
                 const audioPath = path.resolve(__dirname, 'audio.mp3');
+                if (!fs.existsSync(audioPath)) {
+                    console.warn(`⚠️ [VoIP] Warning: audio file not found at ${audioPath}!`);
+                }
                 const audioSource = fs.existsSync(audioPath) ? audioPath : './audio.mp3';
                 console.log(`[VoIP] Automatically accepting incoming call ${session.callId} with audio: ${audioSource}...`);
                 await session.accept({
@@ -250,14 +260,18 @@ async function start() {
                 console.log(`[VoIP] Call ${session.callId} accepted automatically, streaming audio.mp3.`);
 
                 // Notify caller that call was accepted and audio is streaming
-                await client.sendMessage(session.peerJid, {
-                    text: `📞 *Incoming Call Automatically Accepted!*\n` +
-                        `• Call ID: \`${session.callId}\`\n` +
-                        `• Audio: Streaming \`audio.mp3\` 🎵\n\n` +
-                        `Commands to control:\n` +
-                        `• \`!endcall ${session.callId}\` - End call\n` +
-                        `• \`!mute\` / \`!unmute\` - Mute/unmute microphone`
-                });
+                try {
+                    await client.sendMessage(session.peerJid, {
+                        text: `📞 *Incoming Call Automatically Accepted!*\n` +
+                            `• Call ID: \`${session.callId}\`\n` +
+                            `• Audio: Streaming \`audio.mp3\` 🎵\n\n` +
+                            `Commands to control:\n` +
+                            `• \`!endcall ${session.callId}\` - End call\n` +
+                            `• \`!mute\` / \`!unmute\` - Mute/unmute microphone`
+                    });
+                } catch (sendErr) {
+                    console.error(`[VoIP] Failed sending acceptance message to caller:`, sendErr.message);
+                }
             } catch (err) {
                 if (!session.ended) {
                     console.error(`[VoIP] Error auto-accepting call ${session.callId}:`, err);
@@ -274,21 +288,6 @@ async function start() {
             void autoAcceptAndStream();
         }
     });
-
-    client.on('call', (call) => {
-        const callData = call[0]; // Get the first call object from the array
-        if (callData.status !== 'offer') return;
-        console.log('\n📞 Call Received!')
-        console.log('Chat ID:', callData.chatId)
-        console.log('From:', callData.from)
-        console.log('Call ID:', callData.id)
-        console.log('Date:', callData.date)
-        console.log('Offline:', callData.offline)
-        console.log('Status:', callData.status)
-        console.log('Is Video:', callData.isVideo)
-        console.log('Is Group:', callData.isGroup)
-        console.log('Phone Number:', callData.phoneNumber)
-    })
 
     client.on('disconnected', (error) => {
         console.log('❌ Client disconnected')
