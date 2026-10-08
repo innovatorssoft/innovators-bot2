@@ -31,7 +31,7 @@
   },
   "homepage": "https://github.com/innovatorssoft/WhatsAppAPI?tab=readme-ov-file#whatsapp-api",
   "dependencies": {
-    "@innovatorssoft/baileys": "^7.4.8",
+    "@innovatorssoft/baileys": "^7.4.9",
     "figlet": "^1.8.0",
     "mime": "^3.0.0",
     "mime-types": "^2.1.35",
