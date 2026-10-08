@@ -213,30 +213,66 @@ async function start() {
         console.log(`--> The Winner Is ${winner.name} With ${winner.voters.length} votes`);
     });
 
+    // Track the latest incoming VoIP session for quick commands (!acceptcall, !rejectcall)
     let lastIncomingSession = null;
+    // Track per-call state context for idempotency and lifecycle management (Call ID -> IncomingCallContext)
+    const incomingCalls = new Map();
 
     // Register VoIP Incoming Call Event Listener
     client.on('call.incoming', async (session) => {
         lastIncomingSession = session;
+        const callId = session.callId;
+
+        // Requirement 2 & 6: Deduplicate duplicate incoming_ringing events per Call ID
+        let context = incomingCalls.get(callId);
+        if (context) {
+            console.log(`[VoIP] [${callId}] Duplicate incoming_ringing ignored`);
+            return;
+        }
+
+        context = {
+            callId,
+            state: session.status || 'incoming_ringing',
+            accepting: false,
+            accepted: false,
+            streaming: false,
+            createdAt: Date.now()
+        };
+        incomingCalls.set(callId, context);
+
         console.log(`\n📞 [VoIP] Incoming ${session.isVideo ? 'Video' : 'Voice'} Call!`);
-        console.log(`   Call ID: ${session.callId}`);
+        console.log(`   Call ID: ${callId}`);
         console.log(`   From: ${session.peerJid}`);
         console.log(`   Caller PN: ${session.callerPn || 'N/A'}`);
         console.log(`   Status: ${session.status} (waiting: ${session.isWaiting})`);
 
-        // Register lifecycle event listeners
-        session.on('stateChange', (state) => console.log(`[VoIP] Call ${session.callId} state: ${state}`));
-        session.on('accepted', () => console.log(`[VoIP] Call ${session.callId} accepted!`));
-        session.on('connected', () => console.log(`[VoIP] Call ${session.callId} connected! 🟢`));
-        session.on('audioReady', () => console.log(`[VoIP] Call ${session.callId} audio ready! 🎵`));
-        session.on('streaming', () => console.log(`[VoIP] Call ${session.callId} audio streaming active! 📡`));
-        session.on('rejected', (reason) => console.log(`[VoIP] Call ${session.callId} rejected: ${reason}`));
-        session.on('error', (err) => console.error(`[VoIP] Call ${session.callId} error:`, err?.message || err));
+        console.log(`[VoIP] [${callId}] Incoming call detected`);
+        console.log(`[VoIP] [${callId}] State: ${session.status}`);
+
+        // Register lifecycle event listeners BEFORE initiating acceptance (Requirement 5)
+        session.on('stateChange', (state) => {
+            if (context) context.state = state;
+            console.log(`[VoIP] [${callId}] State: ${state}`);
+        });
+        session.on('accepted', () => {
+            if (context) context.accepted = true;
+            console.log(`[VoIP] [${callId}] accepted!`);
+        });
+        session.on('connected', () => console.log(`[VoIP] [${callId}] connected! 🟢`));
+        session.on('audioReady', () => console.log(`[VoIP] [${callId}] audio ready! 🎵`));
+        session.on('streaming', () => console.log(`[VoIP] [${callId}] audio streaming active! 📡`));
+        session.on('rejected', (reason) => {
+            if (context) context.state = 'rejected';
+            console.log(`[VoIP] [${callId}] rejected: ${reason}`);
+        });
         session.on('ended', (reason) => {
-            console.log(`[VoIP] Call ${session.callId} ended: ${reason}`);
-            if (lastIncomingSession?.callId === session.callId) {
+            if (context) context.state = 'ended';
+            console.log(`[VoIP] [${callId}] Call ended: ${reason}`);
+            if (lastIncomingSession?.callId === callId) {
                 lastIncomingSession = null;
             }
+            incomingCalls.delete(callId);
+            console.log(`[VoIP] [${callId}] Cleanup completed`);
         });
         session.on('audio', (pcmChunk) => {
             // Decrypted inbound PCM audio chunk received from caller
@@ -244,43 +280,59 @@ async function start() {
 
         // Automatically accept the incoming call and play audio.mp3
         const autoAcceptAndStream = async () => {
-            if (session.ended) return;
+            if (session.ended || context.state === 'ended') return;
+
+            // Requirement 2 & 16: Idempotent acceptance guard
+            if (context.accepting || context.accepted) {
+                console.log(`[VoIP] [${callId}] Acceptance already in progress; ignoring duplicate request`);
+                return;
+            }
+            context.accepting = true;
+
             try {
-                const audioPath = path.resolve(__dirname, 'audio.mp3');
-                if (!fs.existsSync(audioPath)) {
-                    console.warn(`⚠️ [VoIP] Warning: audio file not found at ${audioPath}!`);
-                }
-                const audioSource = fs.existsSync(audioPath) ? audioPath : './audio.mp3';
-                console.log(`[VoIP] Automatically accepting incoming call ${session.callId} with audio: ${audioSource}...`);
+                const audioSource = './audio.mp3';
+
+                console.log(`[VoIP] [${callId}] Acceptance started`);
+                console.log(`[VoIP] [${callId}] Accepting incoming call...`);
+
                 await session.accept({
                     audioSource,
                     repeatAudio: false
                 });
-                if (session.ended) return;
-                console.log(`[VoIP] Call ${session.callId} accepted automatically, streaming audio.mp3.`);
+
+                if (session.ended || context.state === 'ended') return;
+                context.accepted = true;
+                context.accepting = false;
+
+                // Requirement 7: Prevent duplicate audio streaming
+                if (context.streaming) {
+                    console.log(`[VoIP] [${callId}] Audio streaming already active; ignoring duplicate request`);
+                    return;
+                }
+                context.streaming = true;
+                console.log(`[VoIP] [${callId}] Audio initialization started`);
+                console.log(`[VoIP] [${callId}] Streaming started`);
 
                 // Notify caller that call was accepted and audio is streaming
-                try {
-                    await client.sendMessage(session.peerJid, {
-                        text: `📞 *Incoming Call Automatically Accepted!*\n` +
-                            `• Call ID: \`${session.callId}\`\n` +
-                            `• Audio: Streaming \`audio.mp3\` 🎵\n\n` +
-                            `Commands to control:\n` +
-                            `• \`!endcall ${session.callId}\` - End call\n` +
-                            `• \`!mute\` / \`!unmute\` - Mute/unmute microphone`
-                    });
-                } catch (sendErr) {
-                    console.error(`[VoIP] Failed sending acceptance message to caller:`, sendErr.message);
-                }
+                /*   await client.sendMessage(session.peerJid, {
+                       text: `📞 *Incoming Call Automatically Accepted!*\n` +
+                           `• Call ID: \`${callId}\`\n` +
+                           `• Audio: Streaming \`audio.mp3\` 🎵\n\n` +
+                           `Commands to control:\n` +
+                           `• \`!endcall ${callId}\` - End call\n` +
+                           `• \`!mute\` / \`!unmute\` - Mute/unmute microphone`
+                   }).catch(() => {});*/
+
             } catch (err) {
-                if (!session.ended) {
-                    console.error(`[VoIP] Error auto-accepting call ${session.callId}:`, err);
+                context.accepting = false;
+                if (!session.ended && context.state !== 'ended') {
+                    console.error(`[VoIP] [${callId}] Error auto-accepting call:`, err);
                 }
             }
         };
 
         if (session.isWaiting) {
-            console.log(`[VoIP] Call ${session.callId} is queued in waiting list, will auto-accept once unblocked.`);
+            console.log(`[VoIP] [${callId}] Call is queued in waiting list, will auto-accept once unblocked.`);
             session.once('ringing', () => {
                 void autoAcceptAndStream();
             });

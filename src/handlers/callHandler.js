@@ -1,29 +1,6 @@
-/**
- * Handle incoming call events
- * @param {object} client - The WhatsAppClient instance
- * @param {Array<object>} call - Call data array
- */
-async function handleIncomingCall(client, call) {
-    try {
-        // Extract phone number from LID if available
-        for (const callData of call) {
-            if (callData.chatId || callData.from) {
-                const jid = callData.chatId || callData.from;
 
-                // Resolve LID to PN using the helper method
-                const resolvedJid = await client._resolveLidToPn(jid);
-                callData.phoneNumber = resolvedJid.split(':')[0].split('@')[0];
-            }
-        }
-
-        await client.emit('call', call);
-    } catch (error) {
-        console.error('Error in call handler:', error);
-        if (client.listenerCount && client.listenerCount('error') > 0) {
-            client.emit('error', error);
-        }
-    }
-}
+// Track per-call state context for idempotency and lifecycle management (Call ID -> IncomingCallContext)
+const incomingCalls = new Map();
 
 /**
  * Handle VoIP incoming call session event
@@ -32,13 +9,41 @@ async function handleIncomingCall(client, call) {
  */
 async function handleVoipIncomingCall(client, session) {
     try {
+        const callId = session?.callId;
+        if (!callId) {
+            return;
+        }
+
+        // Deduplicate duplicate incoming_ringing events per Call ID
+        let context = incomingCalls.get(callId);
+        if (context || session._hasEmittedIncoming) {
+            console.log(`[VoIP] [${callId}] Duplicate incoming_ringing ignored in handleVoipIncomingCall`);
+            return;
+        }
+        session._hasEmittedIncoming = true;
+
+        context = {
+            callId,
+            state: session.status || 'incoming_ringing',
+            createdAt: Date.now()
+        };
+        incomingCalls.set(callId, context);
+
         client.lastIncomingSession = session;
+        if (!client.incomingCalls) {
+            client.incomingCalls = incomingCalls;
+        }
 
         // Auto clean up reference when call ends
+        session.on('stateChange', (state) => {
+            if (context) context.state = state;
+        });
         session.on('ended', () => {
-            if (client.lastIncomingSession?.callId === session.callId) {
+            if (context) context.state = 'ended';
+            if (client.lastIncomingSession?.callId === callId) {
                 client.lastIncomingSession = null;
             }
+            incomingCalls.delete(callId);
         });
 
         // Emit call.incoming and alias call:incoming on client
@@ -53,7 +58,6 @@ async function handleVoipIncomingCall(client, session) {
 }
 
 module.exports = {
-    handleIncomingCall,
     handleVoipIncomingCall
 };
 

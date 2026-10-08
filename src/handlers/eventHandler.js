@@ -4,7 +4,7 @@ const { formatCode } = require('../utils/formatters');
 const { handleMessagesUpsert } = require('./messageHandler');
 const { handleMessagesUpdate } = require('./updateHandler');
 const { handleMessagesReaction } = require('./reactionHandler');
-const { handleIncomingCall, handleVoipIncomingCall } = require('./callHandler');
+const { handleVoipIncomingCall } = require('./callHandler');
 const {
     handleGroupsUpsert,
     handleGroupsUpdate,
@@ -127,9 +127,6 @@ function registerSocketEvents(client, authState, saveCreds) {
 
     // Message reactions
     sock.ev.on('messages.reaction', (reactions) => handleMessagesReaction(client, reactions));
-
-    // Incoming calls (standard signaling)
-    sock.ev.on('call', (call) => handleIncomingCall(client, call));
 
     // VoIP incoming calls (WebAssembly VoIP engine sessions)
     sock.ev.on('call.incoming', (session) => handleVoipIncomingCall(client, session));
