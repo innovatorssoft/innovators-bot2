@@ -17,7 +17,9 @@ async function handleVoipIncomingCall(client, session) {
         // Deduplicate duplicate incoming_ringing events per Call ID
         let context = incomingCalls.get(callId);
         if (context || session._hasEmittedIncoming) {
-            console.log(`[VoIP] [${callId}] Duplicate incoming_ringing ignored in handleVoipIncomingCall`);
+            if (client?.isVoipDiagnosticMode?.() || client?.debugVoip) {
+                console.log(`[VoIP] [${callId}] Duplicate incoming_ringing ignored in handleVoipIncomingCall`);
+            }
             return;
         }
         session._hasEmittedIncoming = true;

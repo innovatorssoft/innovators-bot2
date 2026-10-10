@@ -4,7 +4,8 @@ const { WhatsAppClient,
     renderLatexToPng,
     uploadUnencryptedToWA,
     RichSubMessageType,
-    monitorPresence
+    monitorPresence,
+    voipDiagnostics
 } = require('./index')
 
 const qrcode = require('qrcode-terminal')
@@ -52,17 +53,28 @@ async function start() {
 
     rl.close();
 
+    // Check if VoIP diagnostic mode is requested via flag or environment variable (can be controlled by boolean)
+    const debugVoip = process.argv.includes('--debug-voip') || process.env.DEBUG_VOIP === '1';
+    if (debugVoip) {
+        voipDiagnostics.setDiagnosticMode(true);
+        console.log('\n======================================================');
+        console.log('🔍 [VoIP Diagnostics] Detailed VoIP Diagnostics & Tracing ENABLED');
+        console.log('======================================================\n');
+    }
+
     const client = new WhatsAppClient({
         sessionName: sessionDir,
         authmethod: authMethod,
         pairingPhoneNumber: pairingPhoneNumber,
         markOnlineOnConnect: true,
         ai: true, // Enable/Disable AI flag for outgoing messages (default: true)
+        debugVoip, // Boolean: set to true to show detailed VoIP diagnostics & tracing logs, false to hide
         // VoIP Configuration & Memory Optimization
         voip: {
             pthreadPoolSize: 4, // Memory optimization: 4 worker threads per call (saves ~270MB RAM/call)
             maxConcurrentCalls: 3, // Maximum concurrent VoIP calls allowed
             onLimit: 'reject', // Capacity policy: 'reject' (auto-reject busy) or 'queue'
+            diagnostic: debugVoip // Pass boolean diagnostic flag directly to VoIP subsystem
         },
         // Message store persistence configuration
         messageStoreFilePath: path.join(sessionDir, 'message-store.json'),
@@ -268,6 +280,10 @@ async function start() {
         session.on('ended', (reason) => {
             if (context) context.state = 'ended';
             console.log(`[VoIP] [${callId}] Call ended: ${reason}`);
+            if (client.isVoipDiagnosticMode()) {
+                console.log(`\n📋 [VoIP Diagnostics] Timeline for Call [${callId}]:`);
+                console.log(client.formatVoipTimeline(callId));
+            }
             if (lastIncomingSession?.callId === callId) {
                 lastIncomingSession = null;
             }

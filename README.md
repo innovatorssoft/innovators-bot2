@@ -246,6 +246,49 @@ const result = await client.offerCall(jid, false);
 await client.cancelCall(result.callId, jid);
 ```
 
+#### 🔍 VoIP Diagnostics & Event Tracing (Show/Hide Logs)
+
+Control detailed VoIP subsystem diagnostics, state machine tracing, and event timelines with a boolean flag or at runtime:
+
+```javascript
+// 1. Enable via client configuration (Boolean control)
+const client = new WhatsAppClient({
+    debugVoip: true, // Boolean: true to show detailed VoIP diagnostics & tracing logs, false to hide
+    voip: {
+        pthreadPoolSize: 4,
+        maxConcurrentCalls: 3,
+        onLimit: 'reject',
+        diagnostic: true // or pass boolean diagnostic flag directly to VoIP options
+    }
+});
+
+// Or enable via CLI flag / environment variable:
+// node example.js --debug-voip
+// DEBUG_VOIP=1 node example.js
+
+// 2. Control showing/hiding logs dynamically at runtime (Boolean)
+client.setVoipDiagnosticMode(true);  // Show detailed VoIP diagnostic logs in console & log file
+client.setVoipDiagnosticMode(false); // Hide diagnostic logs (only warnings/errors displayed)
+console.log('Is VoIP debug enabled:', client.isVoipDiagnosticMode());
+
+// 3. Inspect per-call structured event timelines
+const timelineText = client.formatVoipTimeline(callId);
+console.log(timelineText);
+// Sample output:
+// === VoIP Call Timeline: 123456789 ===
+// 14:20:30.123 (+0ms)   CallManager.call_incoming_emitted {"direction":"inbound"}
+// 14:20:30.250 (+127ms) SignalingBridge.sending_accept_node
+// 14:20:31.000 (+877ms) CallSession.call_connected
+
+const timelineEntries = client.getVoipTimeline(callId); // Raw array of structured events
+client.clearVoipTimeline(callId);                       // Clear recorded events
+
+// 4. Standalone voipDiagnostics singleton & helper
+const { voipDiagnostics, setVoipDiagnosticMode } = require('innovators-bot2');
+setVoipDiagnosticMode(true); // Toggle globally
+voipDiagnostics.setDiagnosticMode(false);
+```
+
 ### 2. Media Handling
 
 Send images, videos, audio, documents, and PTT voice notes with automatic format conversion.

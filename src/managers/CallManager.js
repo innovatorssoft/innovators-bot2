@@ -1,3 +1,5 @@
+const { voipDiagnostics } = require('@innovatorssoft/baileys');
+
 const CallManager = {
     /**
      * Reject an incoming call
@@ -392,6 +394,97 @@ const CallManager = {
         } catch (error) {
             console.error('Error canceling call:', error);
             throw error;
+        }
+    },
+
+    /**
+     * Enable or disable detailed VoIP diagnostic logging and tracing
+     * @param {boolean} [enabled=true] - true to show detailed VoIP diagnostics logs, false to hide
+     * @returns {boolean} Current diagnostic mode state
+     */
+    setVoipDiagnosticMode(enabled = true) {
+        this.debugVoip = Boolean(enabled);
+        if (typeof this.voip === 'object' && this.voip !== null) {
+            this.voip.diagnostic = this.debugVoip;
+        }
+        if (voipDiagnostics && typeof voipDiagnostics.setDiagnosticMode === 'function') {
+            voipDiagnostics.setDiagnosticMode(this.debugVoip);
+        }
+        if (this.debugVoip) {
+            console.log('\n======================================================');
+            console.log('🔍 [VoIP Diagnostics] Detailed VoIP Diagnostics & Tracing ENABLED');
+            console.log('======================================================\n');
+        } else {
+            console.log('🔍 [VoIP Diagnostics] Detailed VoIP Diagnostics & Tracing DISABLED');
+        }
+        return this.debugVoip;
+    },
+
+    /**
+     * Check if VoIP diagnostic mode is currently enabled
+     * @returns {boolean}
+     */
+    isVoipDiagnosticMode() {
+        if (voipDiagnostics && typeof voipDiagnostics.isDiagnosticMode === 'function') {
+            return voipDiagnostics.isDiagnosticMode();
+        }
+        return Boolean(this.debugVoip);
+    },
+
+    /**
+     * Get the Baileys voipDiagnostics singleton instance
+     * @returns {object|null}
+     */
+    getVoipDiagnostics() {
+        return voipDiagnostics || null;
+    },
+
+    /**
+     * Get recorded timeline events for a VoIP call
+     * @param {string} callId - Call ID
+     * @returns {Array<object>} Array of timeline event entries
+     */
+    getVoipTimeline(callId) {
+        if (voipDiagnostics && typeof voipDiagnostics.getTimeline === 'function') {
+            return voipDiagnostics.getTimeline(callId);
+        }
+        return [];
+    },
+
+    /**
+     * Format the recorded event timeline for a VoIP call into a human-readable string
+     * @param {string} callId - Call ID
+     * @returns {string} Formatted timeline string
+     */
+    formatVoipTimeline(callId) {
+        if (voipDiagnostics && typeof voipDiagnostics.formatTimeline === 'function') {
+            return voipDiagnostics.formatTimeline(callId);
+        }
+        return `[VOIP TIMELINE] callId=${callId} (diagnostics not available)`;
+    },
+
+    /**
+     * Dump formatted call timeline to diagnostics logger/console
+     * @param {string} callId - Call ID
+     * @param {string} [level='info'] - Log level ('info', 'warn', 'debug')
+     * @returns {string} Formatted timeline string
+     */
+    dumpVoipTimeline(callId, level = 'info') {
+        if (voipDiagnostics && typeof voipDiagnostics.dumpTimeline === 'function') {
+            return voipDiagnostics.dumpTimeline(callId, level);
+        }
+        const formatted = this.formatVoipTimeline(callId);
+        console.log(formatted);
+        return formatted;
+    },
+
+    /**
+     * Clear recorded timeline events for a call
+     * @param {string} callId - Call ID
+     */
+    clearVoipTimeline(callId) {
+        if (voipDiagnostics && typeof voipDiagnostics.clearTimeline === 'function') {
+            voipDiagnostics.clearTimeline(callId);
         }
     }
 };

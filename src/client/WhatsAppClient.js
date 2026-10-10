@@ -11,7 +11,8 @@ const {
     MessageStore,
     parseJid,
     plotJid,
-    normalizePhoneToJid
+    normalizePhoneToJid,
+    voipDiagnostics
 } = require('@innovatorssoft/baileys');
 
 const { registerSocketEvents } = require('../handlers/eventHandler');
@@ -52,9 +53,30 @@ class WhatsAppClient extends EventEmitter {
         this._lastStoreSave = null;
         this.ai = config.ai === undefined ? true : config.ai;
         this.lastIncomingSession = null;
+        this.debugVoip = Boolean(
+            config.debugVoip ??
+            config.diagnostic ??
+            (typeof config.voip === 'object' && config.voip !== null ? (config.voip.diagnostic ?? config.voip.debugVoip) : undefined) ??
+            (typeof process !== 'undefined' && (process.argv?.includes('--debug-voip') || process.env?.DEBUG_VOIP === '1'))
+        );
+        this.voipDiagnostics = voipDiagnostics || null;
         this.voip = config.voip !== undefined ? config.voip : (config.enableVoip !== undefined ? config.enableVoip : true);
+        if (typeof this.voip === 'object' && this.voip !== null) {
+            if (this.voip.diagnostic === undefined) {
+                this.voip.diagnostic = this.debugVoip;
+            }
+        }
         this.enableVoip = typeof this.voip === 'boolean' ? this.voip : Boolean(this.voip);
         this.markOnlineOnConnect = config.markOnlineOnConnect !== undefined ? config.markOnlineOnConnect : true;
+
+        if (voipDiagnostics) {
+            voipDiagnostics.setDiagnosticMode(this.debugVoip);
+        }
+        if (this.debugVoip) {
+            console.log('\n======================================================');
+            console.log('🔍 [VoIP Diagnostics] Detailed VoIP Diagnostics & Tracing ENABLED');
+            console.log('======================================================\n');
+        }
     }
 
     /**
@@ -114,7 +136,10 @@ class WhatsAppClient extends EventEmitter {
                 auth: state,
                 logger,
                 enableVoip: this.enableVoip,
-                voip: this.voip,
+                debugVoip: this.debugVoip,
+                voip: typeof this.voip === 'object' && this.voip !== null
+                    ? { ...this.voip, diagnostic: this.debugVoip }
+                    : (this.voip ? { diagnostic: this.debugVoip } : false),
                 markOnlineOnConnect: this.markOnlineOnConnect,
                 syncFullHistory: true,
                 getMessage: async (key) => {
@@ -330,6 +355,40 @@ class WhatsAppClient extends EventEmitter {
      */
     plotJid(jid) {
         return plotJid(jid);
+    }
+
+    /**
+     * Enable or disable detailed VoIP diagnostic logging and tracing
+     * @param {boolean} [enabled=true] - true to show detailed VoIP diagnostics logs, false to hide
+     * @returns {boolean} Current diagnostic mode state
+     */
+    setVoipDiagnosticMode(enabled = true) {
+        this.debugVoip = Boolean(enabled);
+        if (typeof this.voip === 'object' && this.voip !== null) {
+            this.voip.diagnostic = this.debugVoip;
+        }
+        if (voipDiagnostics) {
+            voipDiagnostics.setDiagnosticMode(this.debugVoip);
+        }
+        if (this.debugVoip) {
+            console.log('\n======================================================');
+            console.log('🔍 [VoIP Diagnostics] Detailed VoIP Diagnostics & Tracing ENABLED');
+            console.log('======================================================\n');
+        } else {
+            console.log('🔍 [VoIP Diagnostics] Detailed VoIP Diagnostics & Tracing DISABLED');
+        }
+        return this.debugVoip;
+    }
+
+    /**
+     * Check if VoIP diagnostic mode is currently enabled
+     * @returns {boolean}
+     */
+    isVoipDiagnosticMode() {
+        if (voipDiagnostics) {
+            return voipDiagnostics.isDiagnosticMode();
+        }
+        return Boolean(this.debugVoip);
     }
 }
 

@@ -12,7 +12,10 @@ const {
     formatDuration,
     formatTimeAgo,
     normalizeContactJid,
-    sendRichHtml: baileysSendRichHtml
+    sendRichHtml: baileysSendRichHtml,
+    voipDiagnostics,
+    sanitizeJid,
+    summarizeNode
 } = require('@innovatorssoft/baileys');
 
 const WhatsAppClient = require('./client/WhatsAppClient');
@@ -57,6 +60,28 @@ function monitorPresence(clientOrSock, jid, options = {}) {
 
 const createPresenceTracker = monitorPresence;
 
+/**
+ * Standalone helper to control VoIP diagnostic logging mode
+ * @param {boolean|object} enabledOrClient - Boolean flag, or WhatsAppClient instance
+ * @param {boolean} [enabled=true] - Boolean flag if client was passed as first arg
+ * @returns {boolean} Current diagnostic mode state
+ */
+function setVoipDiagnosticMode(enabledOrClient = true, enabled = true) {
+    if (typeof enabledOrClient === 'boolean') {
+        if (voipDiagnostics && typeof voipDiagnostics.setDiagnosticMode === 'function') {
+            voipDiagnostics.setDiagnosticMode(enabledOrClient);
+        }
+        return enabledOrClient;
+    }
+    if (enabledOrClient && typeof enabledOrClient.setVoipDiagnosticMode === 'function') {
+        return enabledOrClient.setVoipDiagnosticMode(enabled);
+    }
+    if (voipDiagnostics && typeof voipDiagnostics.setDiagnosticMode === 'function') {
+        voipDiagnostics.setDiagnosticMode(Boolean(enabled));
+    }
+    return Boolean(enabled);
+}
+
 module.exports = {
     WhatsAppClient,
     Group,
@@ -75,7 +100,11 @@ module.exports = {
     normalizeContactJid,
     sendRichHtml,
     convertAudioToOgg,
-    toPTT
+    toPTT,
+    voipDiagnostics,
+    sanitizeJid,
+    summarizeNode,
+    setVoipDiagnosticMode
 };
 
 
